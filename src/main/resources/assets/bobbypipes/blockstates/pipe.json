@@ -1,7 +1,11 @@
 {
-  "variants": {
-    "": {
-      "model": "bobbypipes:block/pipe"
-    }
-  }
+  "multipart": [
+    { "apply": { "model": "bobbypipes:block/pipe_core" } },
+    { "when": { "north": "true" }, "apply": { "model": "bobbypipes:block/pipe_arm" } },
+    { "when": { "east":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 90 } },
+    { "when": { "south": "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 180 } },
+    { "when": { "west":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 270 } },
+    { "when": { "up":    "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "x": 270 } },
+    { "when": { "down":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "x": 90 } }
+  ]
 }

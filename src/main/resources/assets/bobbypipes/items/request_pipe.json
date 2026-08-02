@@ -1,6 +1,6 @@
 {
   "model": {
     "type": "minecraft:model",
-    "model": "bobbypipes:block/request_pipe"
+    "model": "bobbypipes:block/request_pipe_inventory"
   }
 }

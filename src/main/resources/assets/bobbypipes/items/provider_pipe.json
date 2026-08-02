@@ -1,6 +1,6 @@
 {
   "model": {
     "type": "minecraft:model",
-    "model": "bobbypipes:block/provider_pipe"
+    "model": "bobbypipes:block/provider_pipe_inventory"
   }
 }

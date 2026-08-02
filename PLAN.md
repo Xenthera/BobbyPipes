@@ -71,8 +71,8 @@ Prove the stack before any game logic exists.
 
 **Phase 1 complete.**
 
-Still placeholder: all three pipes draw as plain cubes, and `wrench` has no behaviour.
-Connected pipe models are Phase 4 work; the wrench gets its job with the Chassis.
+Still placeholder: `wrench` has no behaviour, and it gets its job with the Chassis. Pipe
+models are no longer placeholder; see Phase 4B.
 
 ---
 
@@ -188,16 +188,23 @@ only for parcels. Worth confirming before building either.
 
 ### Work
 
-- [ ] Decide baked model vs BER per element, and write the decision down with its reasoning
-- [ ] Connection state - six boolean blockstate properties, updated on neighbour change,
-      so a pipe knows which sides to draw arms toward
-- [ ] Multipart blockstate: core plus one arm model per connected side
-- [ ] Voxel shape composed from the same connection state, so collision follows the model
-      instead of the two drifting apart
+- [x] Decide baked model vs BER per element. **Decided: baked for the pipe body.** It
+      batches into the chunk mesh and the body never animates, so a BER would cost per-frame
+      work for nothing. Parcels do animate and stay BER, below.
+- [x] Connection state - six boolean blockstate properties, recomputed on neighbour change
+      one side at a time rather than all six
+- [x] Multipart blockstate: core plus one arm model per connected side
+- [x] Voxel shape composed from the same connection state, so collision follows the model
+      instead of the two drifting apart. Cached per state; the constants are shared with
+      the model and commented as needing to move together.
+- [x] Pipes connect to inventories, not just to each other, so a pipe visibly meets the
+      chest it serves
+- [x] Arms narrower than the core, so a junction reads as a node rather than a uniform tube
 - [ ] Translucent or glass-style body through the per-quad chunk layer, so contents are
       visible from outside
-- [ ] Distinguish pipe types visually by more than a tint, since colour alone fails for
-      colourblind players and in low light
+- [ ] Distinguish pipe types by more than colour. Provider is green and Request blue today,
+      which fails for colourblind players and in low light. Shape or an emblem on the core
+      would carry it without relying on hue.
 - [ ] Parcels rendered in transit. `Parcel` already exposes `atNode`, `nextHop` and
       `progress(ticksPerHop)`, which is exactly what an interpolated position needs.
 - [ ] Sync parcels to the client. They are server-side network state today, so the client
