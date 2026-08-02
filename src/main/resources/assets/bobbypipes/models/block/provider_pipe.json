@@ -1,6 +1,21 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "block/block",
   "textures": {
-    "all": "bobbypipes:block/provider_pipe"
-  }
+    "all": "bobbypipes:block/provider_pipe",
+    "particle": "bobbypipes:block/provider_pipe"
+  },
+  "elements": [
+    {
+      "from": [5, 5, 5],
+      "to": [11, 11, 11],
+      "faces": {
+        "north": {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "north"},
+        "south": {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "south"},
+        "east":  {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "east"},
+        "west":  {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "west"},
+        "up":    {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "up"},
+        "down":  {"texture": "#all", "uv": [5, 5, 11, 11], "cullface": "down"}
+      }
+    }
+  ]
 }

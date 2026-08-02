@@ -158,9 +158,58 @@ would mean writing every one of them twice.
 - [ ] Request screen - search, quantity, crafting preview, missing-items report
 - [ ] Chassis screen - module slots + per-module config
 - [ ] Provider / Item Sink filter screens
-- [ ] Connected pipe models, replacing the placeholder cubes
-- [ ] Parcels rendered in transit (the tracker already exposes position and progress)
 - [ ] Crafter screen (needs the Crafter pipe from Phase 6)
+
+Pipe rendering is its own phase, below. It shares the render-state migration but is
+otherwise independent of the screens and can run in either order.
+
+---
+
+## Phase 4B - Pipe rendering
+
+Pipes currently draw as a fixed 6x6x6 core with a flat texture. That is a deliberate
+stopgap, not a design: a thin core is see-past where a full cube was not, and the
+collision and highlight boxes follow it so what you can hit matches what you can see.
+Everything below replaces it.
+
+### What 26.1 changed, and why this needs planning
+
+The render layer moved to be **per-quad**, set at bake time
+(`MutableQuad.chunkLayer()` / `setSprite(sprite, ChunkSectionLayer, RenderType)`). It is no
+longer a `render_type` key in the model JSON and no longer a block-level registration, both
+of which is how every pre-26.1 tutorial does it. Anything wanting a translucent or cutout
+pipe body has to go through the baked-model pipeline, so this is not a one-line change and
+should not be attempted as one.
+
+Open question to settle first: **baked model or block entity renderer.** A baked model is
+far cheaper because it batches into the chunk mesh, but it cannot animate. Parcels moving
+need per-frame positions, so the likely answer is a baked model for the pipe body and a BER
+only for parcels. Worth confirming before building either.
+
+### Work
+
+- [ ] Decide baked model vs BER per element, and write the decision down with its reasoning
+- [ ] Connection state - six boolean blockstate properties, updated on neighbour change,
+      so a pipe knows which sides to draw arms toward
+- [ ] Multipart blockstate: core plus one arm model per connected side
+- [ ] Voxel shape composed from the same connection state, so collision follows the model
+      instead of the two drifting apart
+- [ ] Translucent or glass-style body through the per-quad chunk layer, so contents are
+      visible from outside
+- [ ] Distinguish pipe types visually by more than a tint, since colour alone fails for
+      colourblind players and in low light
+- [ ] Parcels rendered in transit. `Parcel` already exposes `atNode`, `nextHop` and
+      `progress(ticksPerHop)`, which is exactly what an interpolated position needs.
+- [ ] Sync parcels to the client. They are server-side network state today, so the client
+      cannot see them at all; this depends on the Phase 4 networking item.
+- [ ] Connected-texture or seam handling where pipes meet blocks
+- [ ] Performance pass: a large network must not rebuild chunk meshes every tick. Verify
+      with a few hundred pipes and parcels flowing.
+
+### Deliberately out of scope here
+
+Item models in the world, held-item rendering and the guidebook. Those are cosmetic and
+none of them block a playable mod.
 
 ---
 

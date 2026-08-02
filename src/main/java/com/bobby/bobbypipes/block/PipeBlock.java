@@ -3,9 +3,13 @@ package com.bobby.bobbypipes.block;
 import com.bobby.bobbypipes.network.PipeNetwork;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * A transport pipe.
@@ -16,8 +20,40 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public class PipeBlock extends Block {
 
+    /**
+     * The pipe body: a small core in the middle of the block rather than a full cube.
+     *
+     * <p>Interim shape until connected models land. A thin core is see-past, which a full
+     * cube is not, and it is much closer to what a pipe should look like. Collision and
+     * highlight follow the same box so the block you can see is the block you can hit.
+     */
+    private static final VoxelShape CORE = Block.box(5.0, 5.0, 5.0, 11.0, 11.0, 11.0);
+
     public PipeBlock(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos,
+                                  CollisionContext context) {
+        return CORE;
+    }
+
+    @Override
+    protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos,
+                                           CollisionContext context) {
+        return CORE;
+    }
+
+    @Override
+    protected VoxelShape getOcclusionShape(BlockState state) {
+        // Nothing is hidden behind a core this small, so let neighbours draw their faces.
+        return Shapes.empty();
+    }
+
+    @Override
+    protected boolean propagatesSkylightDown(BlockState state) {
+        return true;
     }
 
     @Override
