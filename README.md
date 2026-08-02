@@ -3,7 +3,7 @@
 Request-driven item routing for modern Minecraft. Items move when you ask for them, not
 before.
 
-**Minecraft 26.1.2 , NeoForge , Java 25**
+**Minecraft 26.1.2 / NeoForge / Java 25**
 
 > **Pre-alpha.** Nothing is playable yet. See [PLAN.md](PLAN.md) for what's built and
 > what's next.
@@ -24,7 +24,9 @@ That gives you:
 
 ## Status
 
-Phase 0 complete: toolchain, licensing, and project structure. No gameplay yet.
+Phases 0 and 1 complete: toolchain, licensing, project structure, and a placeholder
+block, item and creative tab that load and render on NeoForge 26.1.2. No gameplay yet.
+Routing engine is next.
 
 ## Relationship to LogisticsPipes
 

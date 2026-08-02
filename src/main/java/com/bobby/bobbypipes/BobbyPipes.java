@@ -1,5 +1,8 @@
 package com.bobby.bobbypipes;
 
+import com.bobby.bobbypipes.registry.ModBlocks;
+import com.bobby.bobbypipes.registry.ModCreativeTabs;
+import com.bobby.bobbypipes.registry.ModItems;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -19,7 +22,9 @@ public class BobbyPipes {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    public BobbyPipes(IEventBus modBus, ModContainer container) {
-        LOGGER.info("BobbyPipes loading");
+    public BobbyPipes(IEventBus modEventBus, ModContainer container) {
+        ModBlocks.register(modEventBus);
+        ModItems.register(modEventBus);
+        ModCreativeTabs.register(modEventBus);
     }
 }

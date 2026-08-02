@@ -46,10 +46,18 @@ Get the repo legally and structurally correct while it is small enough to change
 Prove the stack before any game logic exists.
 
 - [x] `./gradlew build` succeeds from a clean checkout
-- [ ] One block, one item, one creative tab registered
-- [ ] `./gradlew runClient` launches and the mod appears in the mod list
-- [ ] `./gradlew runServer` starts clean (catches client-only leakage early)
-- [ ] CI workflow builds on push
+- [x] One block, one item, one creative tab registered
+      (`bobbypipes:pipe`, `bobbypipes:wrench`, tab `bobbypipes:main`)
+- [x] `./gradlew runClient` launches, block places and renders, item renders,
+      zero missing-model or missing-texture warnings
+- [x] `./gradlew runServer` reaches `Done`, mod listed as `BobbyPipes 0.1.0`,
+      no errors and no missing registry requirements
+- [x] CI workflow builds on push and uploads the jar
+
+**Phase 1 complete.**
+
+Placeholder content, to be replaced later: `pipe` is a plain cube (real model plus
+block entity lands in Phase 2), `wrench` has no behaviour yet.
 
 ---
 
