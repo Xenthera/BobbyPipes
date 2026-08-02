@@ -31,7 +31,10 @@ Get the repo legally and structurally correct while it is small enough to change
 - [x] Write `CLEANROOM.md` — the provenance rules this project operates under
 - [x] Write this plan
 - [x] `git init` + initial commit
-- [ ] Confirm `gradlew` has the executable bit set in the git index (Windows-authored repos lose this)
+- [x] Confirm `gradlew` has the executable bit set in the git index (verified `100755`)
+- [x] Verify `./gradlew build` succeeds and produces `build/libs/bobbypipes-0.1.0.jar`
+
+**Phase 0 complete.**
 
 **Portability rules adopted** (learned from the reference project's failure modes):
 - No absolute paths in `gradle.properties` — JDK comes from the Gradle toolchain + foojay resolver
@@ -44,7 +47,7 @@ Get the repo legally and structurally correct while it is small enough to change
 
 Prove the stack before any game logic exists.
 
-- [ ] `./gradlew build` succeeds from a clean checkout
+- [x] `./gradlew build` succeeds from a clean checkout
 - [ ] One block, one item, one creative tab registered
 - [ ] `./gradlew runClient` launches and the mod appears in the mod list
 - [ ] `./gradlew runServer` starts clean (catches client-only leakage early)
