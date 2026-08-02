@@ -9,11 +9,8 @@ import org.slf4j.LoggerFactory;
 /**
  * BobbyPipes - request-driven item routing for Minecraft.
  *
- * <p>A clean-room reimagining of the LogisticsPipes concept: pipe networks that deliver
- * items on demand rather than pushing them continuously, with modular chassis pipes and
- * recursive crafting resolution.
- *
- * <p>No code is derived from LogisticsPipes. See CLEANROOM.md.
+ * <p>Pipe networks that deliver items on demand rather than pushing them continuously,
+ * with modular chassis pipes and recursive crafting resolution.
  */
 @Mod(BobbyPipes.MOD_ID)
 public class BobbyPipes {

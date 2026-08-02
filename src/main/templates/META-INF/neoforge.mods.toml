@@ -9,8 +9,7 @@ authors="Bobby Lucero"
 description='''
 Request-driven item routing, modular chassis pipes, and recursive crafting for modern Minecraft.
 
-Items move when you ask for them, not before. A clean-room reimagining of the
-request-routing genre, built natively for NeoForge.
+Items move when you ask for them, not before. Built natively for NeoForge.
 '''
 
 [[dependencies.${mod_id}]]

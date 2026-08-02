@@ -29,8 +29,7 @@ Phase 0 complete: toolchain, licensing, and project structure. No gameplay yet.
 ## Relationship to LogisticsPipes
 
 BobbyPipes is inspired by LogisticsPipes but shares no code with it. It is an independent
-clean-room implementation of the same *genre*, not a port or a fork. The rules the project
-holds itself to are written down in [CLEANROOM.md](CLEANROOM.md).
+implementation of the same *genre*, not a port or a fork.
 
 If you want LogisticsPipes itself, go support the original.
 
