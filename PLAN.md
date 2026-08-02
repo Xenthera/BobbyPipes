@@ -82,14 +82,28 @@ of gametests: no game runtime, and the suite runs in about a second. `Topology`,
 `RouteSolver`, `RoutingSnapshot`, `RoutingCache`, `ParcelTracker`, `RequestPlanner` and
 `DeliveryLedger` are all generic over node and item identity.
 
-Connected to the world so far: `PipeBlock` invalidates on place and break, `PipeNetwork`
-reads pipes out of a level, `NetworkEvents` rebuilds off the level tick. Inspect it with
-`/bobbypipes network` and `/bobbypipes route <from> <to>`.
+Connected to the world: `PipeBlock` invalidates on place and break, `PipeNetwork` reads
+pipes out of a level and owns that level's ledger and parcel tracker, `NetworkEvents`
+drives it off the level tick, and `NetworkSupply` reads real inventories through the 26.1
+capability API using `ItemResource` as item identity.
 
-Not yet connected, because the blocks do not exist yet:
-- `Supply` has no world implementation, so nothing reads real inventories
-- no level ticks a `ParcelTracker`, so nothing visibly moves
+**Verified in a real world** over RCON (`tools/rcon.py`), not only in unit tests:
+
+| Check | Result |
+|---|---|
+| Straight line of 5 pipes | 4 hops, first step correct |
+| Break a pipe mid-line | destination goes unreachable, restoring fixes it |
+| Detour around a gap | reroutes 6 hops up and over |
+| Request 5 iron, near chest has 7 and far chest has 40 | takes all 5 from the near chest |
+| Request 45 | 7 from near, then 38 from far |
+| Request 100 against 47 available | takes 47, reports short by 53 |
+| Request an item nothing holds | nothing found, short by the full amount |
+
+Still not connected, because the blocks do not exist yet:
+- no level injects parcels, so nothing visibly moves
 - nothing commits a `RequestPlan` into `DeliveryLedger` promises
+- every pipe with an adjacent inventory currently counts as a provider, pending a real
+  Provider pipe type
 
 Those hook up in Phase 5 when the Provider and Request pipes get built.
 

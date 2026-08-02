@@ -1,10 +1,13 @@
 package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.PipeBlock;
+import com.bobby.bobbypipes.request.DeliveryLedger;
+import com.bobby.bobbypipes.transit.ParcelTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.LevelReader;
+import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -33,11 +36,31 @@ public final class PipeNetwork {
     /** Cap on a single graph read, so a pathological world cannot stall the server. */
     private static final int MAX_NODES = 20_000;
 
+    /** Ticks a parcel spends crossing one pipe. */
+    private static final int TICKS_PER_HOP = 5;
+
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
+    private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
+    private final ParcelTracker<BlockPos, ItemResource> parcels = new ParcelTracker<>(TICKS_PER_HOP);
 
     private PipeNetwork(ServerLevel level) {
         this.level = level;
+    }
+
+    /** Outstanding promises on this network. */
+    public DeliveryLedger<BlockPos, ItemResource> ledger() {
+        return ledger;
+    }
+
+    /** Items currently moving on this network. */
+    public ParcelTracker<BlockPos, ItemResource> parcels() {
+        return parcels;
+    }
+
+    /** A view of what this network can offer {@code requester}, nearest provider first. */
+    public NetworkSupply supplyFor(BlockPos requester) {
+        return new NetworkSupply(level, cache.current(), requester, ledger);
     }
 
     public static synchronized PipeNetwork get(ServerLevel level) {
@@ -76,9 +99,23 @@ public final class PipeNetwork {
         cache.invalidate(() -> readWorld(seed));
     }
 
-    /** Rebuilds if the layout changed. Called once per level tick. */
+    /**
+     * Advances the network by one tick: rebuild if the layout changed, move parcels, and
+     * release promises whose deadline has passed.
+     *
+     * @return true if the routing graph was rebuilt this tick
+     */
     public boolean tick() {
-        return cache.rebuildIfDirty();
+        boolean rebuilt = cache.rebuildIfDirty();
+
+        // Nothing injects parcels yet, so this is a no-op in practice. It is wired now so
+        // that when the Request pipe lands the only new work is consuming the report:
+        // settling promises for deliveries, and dropping stranded payloads into the world
+        // at the node they gave up on.
+        parcels.tick(cache.current());
+
+        ledger.expire(level.getGameTime());
+        return rebuilt;
     }
 
     /** Forces an immediate read and solve. Used by the debug command. */

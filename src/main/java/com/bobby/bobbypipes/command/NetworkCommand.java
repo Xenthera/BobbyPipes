@@ -3,14 +3,22 @@ package com.bobby.bobbypipes.command;
 import com.bobby.bobbypipes.network.PipeNetwork;
 import com.bobby.bobbypipes.network.RouteTable;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
+import com.bobby.bobbypipes.request.Demand;
+import com.bobby.bobbypipes.request.RequestPlan;
+import com.bobby.bobbypipes.request.RequestPlanner;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
+import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,8 +30,9 @@ import java.util.Optional;
  * checked in a real world rather than only in unit tests.
  *
  * <pre>
- *   /bobbypipes network            report the network containing the nearest pipe
- *   /bobbypipes route &lt;from&gt; &lt;to&gt;  show hop count and the first step between two pipes
+ *   /bobbypipes network                report the network containing the nearest pipe
+ *   /bobbypipes route &lt;from&gt; &lt;to&gt;      hop count and first step between two pipes
+ *   /bobbypipes request &lt;at&gt; &lt;item&gt; &lt;count&gt; plan a request against real inventories
  * </pre>
  */
 public final class NetworkCommand {
@@ -41,16 +50,20 @@ public final class NetworkCommand {
                 .then(Commands.literal("route")
                         .then(Commands.argument("from", BlockPosArgument.blockPos())
                                 .then(Commands.argument("to", BlockPosArgument.blockPos())
-                                        .executes(NetworkCommand::reportRoute)))));
+                                        .executes(NetworkCommand::reportRoute))))
+                .then(Commands.literal("request")
+                        .then(Commands.argument("at", BlockPosArgument.blockPos())
+                                .then(Commands.argument("item", IdentifierArgument.id())
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                .executes(NetworkCommand::reportRequest))))));
     }
 
-    private static int reportNetwork(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context)
-            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer player = context.getSource().getPlayerOrException();
-        ServerLevel level = player.level();
+    private static int reportNetwork(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
+        ServerLevel level = context.getSource().getLevel();
         PipeNetwork network = PipeNetwork.get(level);
+        BlockPos around = BlockPos.containing(context.getSource().getPosition());
 
-        Optional<BlockPos> seed = findNearbyPipe(level, player.blockPosition());
+        Optional<BlockPos> seed = findNearbyPipe(level, around);
         if (seed.isEmpty()) {
             reply(context, "No pipe within " + SEARCH_RADIUS + " blocks.");
             return 0;
@@ -90,6 +103,51 @@ public final class NetworkCommand {
         reply(context, format(from) + " to " + format(to)
                 + ": " + cost.get() + " hops, first step " + format(next) + ".");
         return 1;
+    }
+
+    /**
+     * Plans a request against the real inventories on the network and reports the plan
+     * without committing it.
+     *
+     * <p>Exercises the whole chain: routing graph, then provider discovery in cost order,
+     * then the planner.
+     */
+    private static int reportRequest(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerLevel level = context.getSource().getLevel();
+        BlockPos at = BlockPosArgument.getLoadedBlockPos(context, "at");
+        Identifier itemId = IdentifierArgument.getId(context, "item");
+        int count = IntegerArgumentType.getInteger(context, "count");
+
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
+        if (item == null) {
+            reply(context, "Unknown item: " + itemId);
+            return 0;
+        }
+
+        PipeNetwork network = PipeNetwork.get(level);
+        if (!network.rebuildNow(at).contains(at)) {
+            reply(context, "No pipe at " + format(at) + " to request from.");
+            return 0;
+        }
+
+        ItemResource wanted = ItemResource.of(item);
+        RequestPlan<BlockPos, ItemResource> plan = RequestPlanner.plan(
+                new Demand<>(wanted, count), network.supplyFor(at));
+
+        reply(context, "Request " + count + " " + itemId + " at " + format(at) + ":");
+        if (plan.withdrawals().isEmpty()) {
+            reply(context, "  nothing found on the network");
+        }
+        for (RequestPlan.Withdrawal<BlockPos, ItemResource> withdrawal : plan.withdrawals()) {
+            reply(context, "  take " + withdrawal.amount() + " via pipe " + format(withdrawal.source()));
+        }
+        if (plan.isComplete()) {
+            reply(context, "  plan is complete");
+        } else {
+            plan.missing().forEach(shortfall -> reply(context, "  short by " + shortfall.amount()));
+        }
+        return plan.isComplete() ? 1 : 0;
     }
 
     /** Nearest pipe to {@code around}, searched outward so the closest one wins. */
