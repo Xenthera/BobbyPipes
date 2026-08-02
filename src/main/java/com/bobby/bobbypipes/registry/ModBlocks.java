@@ -1,6 +1,7 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.block.PipeBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -16,11 +17,11 @@ public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(BobbyPipes.MOD_ID);
 
     /**
-     * Placeholder for the transport pipe. A plain cube for now; the real pipe gets a
-     * connected model and a block entity in the routing phase.
+     * The transport pipe. Still drawn as a plain cube; the connected model comes with the
+     * rendering work later.
      */
-    public static final DeferredBlock<Block> PIPE = registerWithItem("pipe",
-            props -> new Block(props
+    public static final DeferredBlock<PipeBlock> PIPE = registerWithItem("pipe",
+            props -> new PipeBlock(props
                     .strength(0.3f)
                     .sound(SoundType.METAL)
                     .noOcclusion()));

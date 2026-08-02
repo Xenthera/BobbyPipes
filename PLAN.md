@@ -65,17 +65,37 @@ block entity lands in Phase 2), `wrench` has no behaviour yet.
 
 The core value. Loader-agnostic logic, least affected by 26.1's API changes.
 
-- [ ] Network discovery - pipe adjacency graph, incremental rebuild on place/break
-- [ ] Router model - each routed pipe is a node with a stable identity across reloads
-- [ ] Path computation - Dijkstra, computed once per topology change, **never per tick**
-- [ ] Atomic route-table swap so in-flight items survive a rebuild
-- [ ] Item-in-transit model - items exist as network state, not entities
-- [ ] Request tree - recursive resolution of a request into providers + crafting steps
-- [ ] Order manager - outstanding promises, timeouts, failure/rollback
-- [ ] Gametest coverage for: delivery, provider selection, request failure, topology change mid-flight
+- [x] Network discovery - pipe adjacency graph, incremental rebuild on place/break
+- [x] Router model - each routed pipe is a node with a stable identity across reloads
+- [x] Path computation - Dijkstra, computed once per topology change, **never per tick**
+- [x] Atomic route-table swap so in-flight items survive a rebuild
+- [x] Item-in-transit model - items exist as network state, not entities
+- [x] Request tree - recursive resolution of a request into providers + crafting steps
+- [x] Order manager - outstanding promises, timeouts, failure/rollback
+- [x] Coverage for delivery, provider selection, request failure and topology change
+      mid-flight: 57 unit tests, not gametests (see note below)
+
+**Phase 2 engine complete. Only the routing graph is wired to the world.**
+
+The engine carries no Minecraft types at all, which is why plain JUnit covers it instead
+of gametests: no game runtime, and the suite runs in about a second. `Topology`,
+`RouteSolver`, `RoutingSnapshot`, `RoutingCache`, `ParcelTracker`, `RequestPlanner` and
+`DeliveryLedger` are all generic over node and item identity.
+
+Connected to the world so far: `PipeBlock` invalidates on place and break, `PipeNetwork`
+reads pipes out of a level, `NetworkEvents` rebuilds off the level tick. Inspect it with
+`/bobbypipes network` and `/bobbypipes route <from> <to>`.
+
+Not yet connected, because the blocks do not exist yet:
+- `Supply` has no world implementation, so nothing reads real inventories
+- no level ticks a `ParcelTracker`, so nothing visibly moves
+- nothing commits a `RequestPlan` into `DeliveryLedger` promises
+
+Those hook up in Phase 5 when the Provider and Request pipes get built.
 
 > Design note: this is the subsystem where a naive implementation would most closely
-> mirror LP1's structure. Write it from observed behaviour, not from reading their source.
+> mirror LP1's structure. Written from observed behaviour, not from reading their source,
+> and with its own vocabulary throughout.
 
 ---
 
