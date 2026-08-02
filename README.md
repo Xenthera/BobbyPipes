@@ -3,7 +3,7 @@
 Request-driven item routing for modern Minecraft. Items move when you ask for them, not
 before.
 
-**Minecraft 26.1.2 · NeoForge · Java 25**
+**Minecraft 26.1.2 , NeoForge , Java 25**
 
 > **Pre-alpha.** Nothing is playable yet. See [PLAN.md](PLAN.md) for what's built and
 > what's next.
@@ -12,15 +12,15 @@ before.
 
 Most item-transport mods push: you insert items at one end and hope they land somewhere
 useful. BobbyPipes pulls. You ask the network for 64 iron ingots, and the network works
-out who has them, who can craft them, and routes exactly that much to you — then goes
+out who has them, who can craft them, and routes exactly that much to you - then goes
 quiet again.
 
 That gives you:
 
-- **Request-based delivery** — no constant item flow, no items circulating forever
-- **Recursive crafting** — request a machine, get its whole crafting tree resolved
-- **Modular chassis pipes** — behaviour is composed from modules, not baked into pipe types
-- **Networks that scale** — routes are computed on topology change, never per tick
+- **Request-based delivery** - no constant item flow, no items circulating forever
+- **Recursive crafting** - request a machine, get its whole crafting tree resolved
+- **Modular chassis pipes** - behaviour is composed from modules, not baked into pipe types
+- **Networks that scale** - routes are computed on topology change, never per tick
 
 ## Status
 
@@ -46,7 +46,7 @@ the foojay resolver.
 ```
 
 No absolute paths are baked into the build. If it doesn't build on a fresh clone, that's a
-bug — please report it.
+bug - please report it.
 
 ## License
 

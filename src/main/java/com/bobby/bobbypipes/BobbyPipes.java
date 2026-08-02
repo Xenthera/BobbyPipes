@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * BobbyPipes — request-driven item routing for Minecraft.
+ * BobbyPipes - request-driven item routing for Minecraft.
  *
  * <p>A clean-room reimagining of the LogisticsPipes concept: pipe networks that deliver
  * items on demand rather than pushing them continuously, with modular chassis pipes and
