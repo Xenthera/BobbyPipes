@@ -1,12 +1,10 @@
 package com.bobby.bobbypipes.network;
 
+import com.bobby.bobbypipes.block.ProviderPipeBlock;
 import com.bobby.bobbypipes.request.DeliveryLedger;
 import com.bobby.bobbypipes.request.Supply;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayList;
@@ -26,8 +24,8 @@ import java.util.List;
  * <p>Stock already promised to an earlier request is subtracted before it is offered, so
  * two requests a tick apart cannot both plan against the same items.
  *
- * <p>Temporary until the Provider pipe exists: every pipe with an adjacent inventory acts
- * as a provider. Once providers are an explicit pipe type this filters to those.
+ * <p>Only {@link ProviderPipeBlock} nodes offer stock. Being a provider is opt-in so a
+ * plain pipe routed past a chest does not quietly hand out its contents.
  */
 public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
 
@@ -53,7 +51,10 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
         }
         List<Stock<BlockPos, ItemResource>> found = new ArrayList<>();
         for (BlockPos pipe : providerNodesByDistance()) {
-            int held = countAdjacentTo(pipe, item);
+            if (!isProvider(pipe)) {
+                continue;
+            }
+            int held = InventoryAccess.count(level, pipe, item);
             if (held <= 0) {
                 continue;
             }
@@ -89,25 +90,8 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
                 .orElseGet(() -> routes.contains(requester) ? List.of(requester) : List.of());
     }
 
-    /** Total count of {@code item} in inventories touching {@code pipe}. */
-    private int countAdjacentTo(BlockPos pipe, ItemResource item) {
-        int total = 0;
-        for (Direction direction : Direction.values()) {
-            BlockPos neighbour = pipe.relative(direction);
-            if (!level.hasChunkAt(neighbour)) {
-                continue;
-            }
-            ResourceHandler<ItemResource> handler = level.getCapability(
-                    Capabilities.Item.BLOCK, neighbour, direction.getOpposite());
-            if (handler == null) {
-                continue;
-            }
-            for (int slot = 0; slot < handler.size(); slot++) {
-                if (item.equals(handler.getResource(slot))) {
-                    total += handler.getAmountAsInt(slot);
-                }
-            }
-        }
-        return total;
+    private boolean isProvider(BlockPos pipe) {
+        return level.hasChunkAt(pipe)
+                && level.getBlockState(pipe).getBlock() instanceof ProviderPipeBlock;
     }
 }

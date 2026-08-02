@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.PipeBlock;
 import com.bobby.bobbypipes.request.DeliveryLedger;
+import com.bobby.bobbypipes.transit.ItemShipment;
 import com.bobby.bobbypipes.transit.ParcelTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -42,7 +43,7 @@ public final class PipeNetwork {
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
     private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
-    private final ParcelTracker<BlockPos, ItemResource> parcels = new ParcelTracker<>(TICKS_PER_HOP);
+    private final ParcelTracker<BlockPos, ItemShipment> parcels = new ParcelTracker<>(TICKS_PER_HOP);
 
     private PipeNetwork(ServerLevel level) {
         this.level = level;
@@ -54,7 +55,7 @@ public final class PipeNetwork {
     }
 
     /** Items currently moving on this network. */
-    public ParcelTracker<BlockPos, ItemResource> parcels() {
+    public ParcelTracker<BlockPos, ItemShipment> parcels() {
         return parcels;
     }
 
@@ -108,11 +109,7 @@ public final class PipeNetwork {
     public boolean tick() {
         boolean rebuilt = cache.rebuildIfDirty();
 
-        // Nothing injects parcels yet, so this is a no-op in practice. It is wired now so
-        // that when the Request pipe lands the only new work is consuming the report:
-        // settling promises for deliveries, and dropping stranded payloads into the world
-        // at the node they gave up on.
-        parcels.tick(cache.current());
+        RequestService.handle(level, this, parcels.tick(cache.current()));
 
         ledger.expire(level.getGameTime());
         return rebuilt;

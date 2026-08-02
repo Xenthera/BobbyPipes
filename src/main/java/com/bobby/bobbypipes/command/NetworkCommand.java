@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.command;
 
 import com.bobby.bobbypipes.network.PipeNetwork;
 import com.bobby.bobbypipes.network.RouteTable;
+import com.bobby.bobbypipes.network.RequestService;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
 import com.bobby.bobbypipes.request.Demand;
 import com.bobby.bobbypipes.request.RequestPlan;
@@ -32,7 +33,9 @@ import java.util.Optional;
  * <pre>
  *   /bobbypipes network                report the network containing the nearest pipe
  *   /bobbypipes route &lt;from&gt; &lt;to&gt;      hop count and first step between two pipes
- *   /bobbypipes request &lt;at&gt; &lt;item&gt; &lt;count&gt; plan a request against real inventories
+ *   /bobbypipes plan &lt;at&gt; &lt;item&gt; &lt;count&gt;    plan a request without moving anything
+ *   /bobbypipes request &lt;at&gt; &lt;item&gt; &lt;count&gt; plan it and actually ship the items
+ *   /bobbypipes parcels                      what is currently in flight
  * </pre>
  */
 public final class NetworkCommand {
@@ -51,11 +54,17 @@ public final class NetworkCommand {
                         .then(Commands.argument("from", BlockPosArgument.blockPos())
                                 .then(Commands.argument("to", BlockPosArgument.blockPos())
                                         .executes(NetworkCommand::reportRoute))))
+                .then(Commands.literal("plan")
+                        .then(Commands.argument("at", BlockPosArgument.blockPos())
+                                .then(Commands.argument("item", IdentifierArgument.id())
+                                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                                .executes(context -> request(context, false))))))
                 .then(Commands.literal("request")
                         .then(Commands.argument("at", BlockPosArgument.blockPos())
                                 .then(Commands.argument("item", IdentifierArgument.id())
                                         .then(Commands.argument("count", IntegerArgumentType.integer(1))
-                                                .executes(NetworkCommand::reportRequest))))));
+                                                .executes(context -> request(context, true))))))
+                .then(Commands.literal("parcels").executes(NetworkCommand::reportParcels)));
     }
 
     private static int reportNetwork(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
@@ -112,7 +121,8 @@ public final class NetworkCommand {
      * <p>Exercises the whole chain: routing graph, then provider discovery in cost order,
      * then the planner.
      */
-    private static int reportRequest(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context)
+    private static int request(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context,
+                               boolean commit)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerLevel level = context.getSource().getLevel();
         BlockPos at = BlockPosArgument.getLoadedBlockPos(context, "at");
@@ -147,7 +157,29 @@ public final class NetworkCommand {
         } else {
             plan.missing().forEach(shortfall -> reply(context, "  short by " + shortfall.amount()));
         }
-        return plan.isComplete() ? 1 : 0;
+
+        if (!commit) {
+            return plan.isComplete() ? 1 : 0;
+        }
+
+        RequestService.Commitment commitment = RequestService.commit(level, network, plan, at);
+        reply(context, "  shipped " + commitment.shipped() + " of " + commitment.requested()
+                + (commitment.isComplete() ? "" : ", short by " + commitment.shortfall()));
+        return commitment.shipped();
+    }
+
+    /** Reports what is currently moving, which is otherwise invisible until rendering lands. */
+    private static int reportParcels(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
+        ServerLevel level = context.getSource().getLevel();
+        PipeNetwork network = PipeNetwork.get(level);
+        int inFlight = network.parcels().inFlight();
+
+        reply(context, inFlight + " parcel(s) in flight, "
+                + network.ledger().openCount() + " open promise(s).");
+        network.parcels().parcels().forEach(parcel -> reply(context,
+                "  " + parcel.payload() + " at " + format(parcel.atNode())
+                        + " heading to " + format(parcel.destination())));
+        return inFlight;
     }
 
     /** Nearest pipe to {@code around}, searched outward so the closest one wins. */

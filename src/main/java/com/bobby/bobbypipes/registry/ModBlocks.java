@@ -2,6 +2,8 @@ package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.PipeBlock;
+import com.bobby.bobbypipes.block.ProviderPipeBlock;
+import com.bobby.bobbypipes.block.RequestPipeBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -22,6 +24,20 @@ public final class ModBlocks {
      */
     public static final DeferredBlock<PipeBlock> PIPE = registerWithItem("pipe",
             props -> new PipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Offers the inventories touching it to the network. */
+    public static final DeferredBlock<ProviderPipeBlock> PROVIDER_PIPE =
+            registerWithItem("provider_pipe", props -> new ProviderPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Requests items from the network and delivers them into the inventories touching it. */
+    public static final DeferredBlock<RequestPipeBlock> REQUEST_PIPE =
+            registerWithItem("request_pipe", props -> new RequestPipeBlock(props
                     .strength(0.3f)
                     .sound(SoundType.METAL)
                     .noOcclusion()));

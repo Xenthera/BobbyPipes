@@ -1,6 +1,7 @@
 {
   "itemGroup.bobbypipes": "BobbyPipes",
-
   "block.bobbypipes.pipe": "Pipe",
-  "item.bobbypipes.wrench": "Wrench"
+  "item.bobbypipes.wrench": "Wrench",
+  "block.bobbypipes.provider_pipe": "Provider Pipe",
+  "block.bobbypipes.request_pipe": "Request Pipe"
 }

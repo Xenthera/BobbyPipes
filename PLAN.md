@@ -164,11 +164,27 @@ Do **not** build all pipe types before anything is playable.
 
 Minimum shippable loop:
 
-- [ ] Basic transport pipe
-- [ ] Provider pipe (exposes an inventory to the network)
-- [ ] Request pipe + its GUI
+- [x] Basic transport pipe
+- [x] Provider pipe (exposes an inventory to the network)
+- [x] Request pipe, driving the full pull-extract-route-deliver loop
+- [ ] Request GUI (Phase 4)
 - [ ] Chassis pipe with one module slot
 - [ ] Item Sink module (routes matching items to an inventory)
+
+**Items move end to end.** Verified in a real world over RCON: a request pulled 10 iron
+out of a chest behind a Provider pipe, routed it four hops, and dropped it into the chest
+behind the Request pipe. Source went 40 to 30, destination 0 to 10, promise settled,
+parcel retired.
+
+Safety behaviour verified too:
+- Being a provider is opt-in. Swapping the Provider pipe for a plain one makes the same
+  chest invisible to the network, so a pipe routed past storage does not drain it.
+- Breaking the network mid-flight strands the parcel and puts the items back into an
+  inventory beside the pipe it gave up on. Source plus destination still totalled the
+  original 40, so nothing was lost or duplicated.
+
+Driven for now by `/bobbypipes plan` (dry run), `/bobbypipes request` (actually ships) and
+`/bobbypipes parcels` (what is in flight), until the GUI replaces them.
 
 At that point the mod is demonstrable. Everything below is breadth, added only after
 the slice works end to end.

@@ -21,6 +21,8 @@ public final class ModCreativeTabs {
                     .icon(() -> ModItems.WRENCH.get().getDefaultInstance())
                     .displayItems((params, output) -> {
                         output.accept(ModBlocks.PIPE.get());
+                        output.accept(ModBlocks.PROVIDER_PIPE.get());
+                        output.accept(ModBlocks.REQUEST_PIPE.get());
                         output.accept(ModItems.WRENCH.get());
                     })
                     .build());
