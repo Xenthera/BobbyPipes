@@ -103,15 +103,28 @@ Those hook up in Phase 5 when the Provider and Request pipes get built.
 
 Where the "reimagining" actually lands. Each row replaces a 1.12-era pattern.
 
-- [ ] **Module config -> data components.** Modules are items; their configuration lives in
-      `DataComponents`, not NBT blobs. Free client sync, tooltips, copy/paste, stacking.
-- [ ] **Pipe & module types -> datapack-driven.** JSON-defined types + code-registered
-      behaviors, instead of ~20 hardcoded classes.
-- [ ] **Filtering -> tags + component predicates.** Replaces OreDict-era fuzzy matching.
-      Use `ItemStackTemplate` for anything appearing in data files.
-- [ ] **Power -> pure FE.** `IEnergyStorage` only. No bespoke energy unit, no custom
-      wire/junction concept beyond an intake block.
-- [ ] **Networking -> `CustomPacketPayload` + `StreamCodec`.** Records throughout.
+- [x] **Module config -> data components.** `ModDataComponents.ITEM_FILTER` carries module
+      configuration on the item, not in block entity NBT. Config travels with the module
+      when it is pulled out of a chassis, survives being carried, and syncs for free.
+- [x] **Filtering -> tags + component predicates.** `ItemFilterEntry` matches by item or by
+      item tag, so a filter saying "any plank" keeps working when a mod adds a wood type.
+      The mode and empty-list semantics live in `FilterList`, which is generic and unit
+      tested; only stack comparison touches Minecraft.
+- [ ] **Networking -> `CustomPacketPayload` + `StreamCodec`.** Deferred to Phase 4.
+- [ ] **Pipe & module types -> datapack-driven.** Deferred, see below.
+- [ ] **Power -> pure FE.** Deferred, see below.
+
+**Three items deliberately deferred rather than done early.**
+
+- *Networking* has nothing to carry until a screen exists. Designing packet shapes before
+  the GUI that uses them means guessing twice. It lands with Phase 4.
+- *Datapack-driven types* would be abstracting a registry over a single implementation.
+  Worth doing at three or four pipe types, when the shared shape is actually visible.
+- *Pure FE power* has no consumer in the Phase 5 slice. An energy system nothing draws
+  from is dead code that still has to be maintained.
+
+None of these is blocked; each is waiting for the thing that would tell it what shape to
+take.
 
 ---
 

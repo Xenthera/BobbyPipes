@@ -2,6 +2,7 @@ package com.bobby.bobbypipes;
 
 import com.bobby.bobbypipes.registry.ModBlocks;
 import com.bobby.bobbypipes.registry.ModCreativeTabs;
+import com.bobby.bobbypipes.registry.ModDataComponents;
 import com.bobby.bobbypipes.registry.ModItems;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -25,6 +26,7 @@ public class BobbyPipes {
     public BobbyPipes(IEventBus modEventBus, ModContainer container) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        ModDataComponents.register(modEventBus);
         ModCreativeTabs.register(modEventBus);
     }
 }
