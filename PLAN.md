@@ -14,6 +14,22 @@ Request-driven item routing, built natively for **NeoForge 26.1**.
 
 Progress markers: `[ ]` todo, `[x]` done, `[~]` in progress
 
+## Where things stand
+
+Phases 0 to 3 are complete. Phase 5 is half done and got there ahead of Phase 4, because
+item movement had to work before there was anything worth putting a screen on.
+
+**Items move end to end today.** A request pulls from a chest behind a Provider pipe,
+routes across the network, and delivers into a chest behind a Request pipe. Driven by
+`/bobbypipes plan`, `/bobbypipes request` and `/bobbypipes parcels` until the GUI lands.
+
+Remaining work is mostly GUI-shaped: packets, a menu, screens, then Chassis and Item Sink.
+
+> **On phase order.** The numbering is the original plan, kept so commit messages still
+> line up. Execution has interleaved 4 and 5 rather than running them in order. Work is
+> pulled forward when it unblocks something and pushed back when doing it early would mean
+> guessing; each deferral says which is which.
+
 ---
 
 ## Phase 0 - Foundation
@@ -47,7 +63,6 @@ Prove the stack before any game logic exists.
 
 - [x] `./gradlew build` succeeds from a clean checkout
 - [x] One block, one item, one creative tab registered
-      (`bobbypipes:pipe`, `bobbypipes:wrench`, tab `bobbypipes:main`)
 - [x] `./gradlew runClient` launches, block places and renders, item renders,
       zero missing-model or missing-texture warnings
 - [x] `./gradlew runServer` reaches `Done`, mod listed as `BobbyPipes 0.1.0`,
@@ -56,8 +71,8 @@ Prove the stack before any game logic exists.
 
 **Phase 1 complete.**
 
-Placeholder content, to be replaced later: `pipe` is a plain cube (real model plus
-block entity lands in Phase 2), `wrench` has no behaviour yet.
+Still placeholder: all three pipes draw as plain cubes, and `wrench` has no behaviour.
+Connected pipe models are Phase 4 work; the wrench gets its job with the Chassis.
 
 ---
 
@@ -73,19 +88,19 @@ The core value. Loader-agnostic logic, least affected by 26.1's API changes.
 - [x] Request tree - recursive resolution of a request into providers + crafting steps
 - [x] Order manager - outstanding promises, timeouts, failure/rollback
 - [x] Coverage for delivery, provider selection, request failure and topology change
-      mid-flight: 57 unit tests, not gametests (see note below)
+      mid-flight: unit tests rather than gametests (see note below)
 
-**Phase 2 engine complete. Only the routing graph is wired to the world.**
+**Phase 2 complete, engine and world wiring both.**
 
 The engine carries no Minecraft types at all, which is why plain JUnit covers it instead
 of gametests: no game runtime, and the suite runs in about a second. `Topology`,
 `RouteSolver`, `RoutingSnapshot`, `RoutingCache`, `ParcelTracker`, `RequestPlanner` and
 `DeliveryLedger` are all generic over node and item identity.
 
-Connected to the world: `PipeBlock` invalidates on place and break, `PipeNetwork` reads
-pipes out of a level and owns that level's ledger and parcel tracker, `NetworkEvents`
-drives it off the level tick, and `NetworkSupply` reads real inventories through the 26.1
-capability API using `ItemResource` as item identity.
+World side: `PipeBlock` invalidates on place and break, `PipeNetwork` reads pipes out of a
+level and owns that level's ledger and parcel tracker, `NetworkEvents` drives it off the
+level tick, `NetworkSupply` reads real inventories through the 26.1 capability API using
+`ItemResource` as item identity, and `InventoryAccess` handles extraction and insertion.
 
 **Verified in a real world** over RCON (`tools/rcon.py`), not only in unit tests:
 
@@ -99,14 +114,6 @@ capability API using `ItemResource` as item identity.
 | Request 100 against 47 available | takes 47, reports short by 53 |
 | Request an item nothing holds | nothing found, short by the full amount |
 
-Still not connected, because the blocks do not exist yet:
-- no level injects parcels, so nothing visibly moves
-- nothing commits a `RequestPlan` into `DeliveryLedger` promises
-- every pipe with an adjacent inventory currently counts as a provider, pending a real
-  Provider pipe type
-
-Those hook up in Phase 5 when the Provider and Request pipes get built.
-
 > Design note: this is the subsystem where a naive implementation would most closely
 > mirror LP1's structure. Written from observed behaviour, not from reading their source,
 > and with its own vocabulary throughout.
@@ -115,7 +122,7 @@ Those hook up in Phase 5 when the Provider and Request pipes get built.
 
 ## Phase 3 - Modern-native redesign passes
 
-Where the "reimagining" actually lands. Each row replaces a 1.12-era pattern.
+Where the "reimagining" actually lands, replacing 1.12-era patterns with modern ones.
 
 - [x] **Module config -> data components.** `ModDataComponents.ITEM_FILTER` carries module
       configuration on the item, not in block entity NBT. Config travels with the module
@@ -124,21 +131,13 @@ Where the "reimagining" actually lands. Each row replaces a 1.12-era pattern.
       item tag, so a filter saying "any plank" keeps working when a mod adds a wood type.
       The mode and empty-list semantics live in `FilterList`, which is generic and unit
       tested; only stack comparison touches Minecraft.
-- [ ] **Networking -> `CustomPacketPayload` + `StreamCodec`.** Deferred to Phase 4.
-- [ ] **Pipe & module types -> datapack-driven.** Deferred, see below.
-- [ ] **Power -> pure FE.** Deferred, see below.
 
-**Three items deliberately deferred rather than done early.**
+**Phase 3 complete.**
 
-- *Networking* has nothing to carry until a screen exists. Designing packet shapes before
-  the GUI that uses them means guessing twice. It lands with Phase 4.
-- *Datapack-driven types* would be abstracting a registry over a single implementation.
-  Worth doing at three or four pipe types, when the shared shape is actually visible.
-- *Pure FE power* has no consumer in the Phase 5 slice. An energy system nothing draws
-  from is dead code that still has to be maintained.
-
-None of these is blocked; each is waiting for the thing that would tell it what shape to
-take.
+Two further redesign passes were originally listed here and have moved to the phase that
+can actually do them: **networking** to Phase 4, **datapack-driven types** and **pure FE
+power** to Phase 6. Neither was skipped; both were waiting on something that would tell
+them what shape to take, and that thing lives in the later phase.
 
 ---
 
@@ -150,11 +149,18 @@ Written **once**, natively in 26.1's render-state model
 This phase is why the whole plan is sequenced this way: writing GUIs on 1.21.1 first
 would mean writing every one of them twice.
 
+- [ ] **Networking - `CustomPacketPayload` + `StreamCodec`.** Records throughout.
+      *Moved here from Phase 3.* Packet shapes follow from what the screens actually need
+      to send and show, so designing them first would have meant guessing twice. This is
+      the prerequisite for everything below it.
+- [ ] Menu and container plumbing for the screens
 - [ ] Shared widget/layout toolkit (the piece LP1 reinvented per-screen)
 - [ ] Request screen - search, quantity, crafting preview, missing-items report
 - [ ] Chassis screen - module slots + per-module config
 - [ ] Provider / Item Sink filter screens
-- [ ] Crafter screen
+- [ ] Connected pipe models, replacing the placeholder cubes
+- [ ] Parcels rendered in transit (the tracker already exposes position and progress)
+- [ ] Crafter screen (needs the Crafter pipe from Phase 6)
 
 ---
 
@@ -167,9 +173,9 @@ Minimum shippable loop:
 - [x] Basic transport pipe
 - [x] Provider pipe (exposes an inventory to the network)
 - [x] Request pipe, driving the full pull-extract-route-deliver loop
-- [ ] Request GUI (Phase 4)
+- [ ] Request GUI - see Phase 4, which is what remains before this is playable without commands
 - [ ] Chassis pipe with one module slot
-- [ ] Item Sink module (routes matching items to an inventory)
+- [ ] Item Sink module (routes matching items to an inventory, using the Phase 3 filter)
 
 **Items move end to end.** Verified in a real world over RCON: a request pulled 10 iron
 out of a chest behind a Provider pipe, routed it four hops, and dropped it into the chest
@@ -186,17 +192,27 @@ Safety behaviour verified too:
 Driven for now by `/bobbypipes plan` (dry run), `/bobbypipes request` (actually ships) and
 `/bobbypipes parcels` (what is in flight), until the GUI replaces them.
 
-At that point the mod is demonstrable. Everything below is breadth, added only after
-the slice works end to end.
+Once the Request screen exists the mod is demonstrable. Everything below is breadth, added
+only after the slice works end to end.
 
 ---
 
 ## Phase 6 - Breadth
 
-- [ ] Crafter pipes + multi-step crafting chains
+- [ ] Crafter pipes + multi-step crafting chains. The planner already resolves recipes
+      recursively; `NetworkSupply.recipesFor` returns nothing only because no block on the
+      network claims it can craft.
 - [ ] Satellite / firewall / quicksort pipes
 - [ ] Higher chassis tiers, remaining modules
+- [ ] **Pipe and module types -> datapack-driven.** *Moved here from Phase 3.* Defining a
+      JSON-driven registry over the three pipe types that exist today would be abstracting
+      over a shape not yet visible. This phase is where enough types exist for the shared
+      structure to be real rather than guessed.
 - [ ] Fluid routing
+- [ ] **Power -> pure FE.** *Moved here from Phase 3.* `IEnergyStorage` only, no bespoke
+      energy unit. Deliberately not built earlier: nothing in the MVP slice draws power, so
+      it would have been an energy system with no consumer, which is dead code that still
+      has to be maintained. It lands with the pipe types that actually cost energy to run.
 - [ ] Security / permissions
 - [ ] Integrations (JEI first) - deliberately last; nothing depends on them
 
@@ -207,5 +223,6 @@ the slice works end to end.
 | Risk | Mitigation |
 |---|---|
 | 26.1 API churn (NeoForge still `-beta`) | Exact version pins; upgrade deliberately, not automatically |
-| Scope - LP is one of the largest mods ever written | Phase 5 slice is non-negotiable before breadth |
+| Scope - LP is one of the largest mods ever written | Phase 5 slice before any Phase 6 breadth. Half done. |
+| GUI work cannot be verified the way item movement was | Screens need eyeballing; logic behind them stays in testable non-Minecraft classes where possible |
 | Ecosystem not yet on 26.1 | Costs nothing - no integrations planned until Phase 6 |
