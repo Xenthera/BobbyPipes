@@ -91,10 +91,13 @@ public class PatternTableScreen extends AbstractContainerScreen<PatternTableMenu
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        super.extractLabels(graphics, mouseX, mouseY);
+        // Drawn here rather than via super, which hardcodes vanilla's dark grey.
+        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
+        graphics.text(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY,
+                PanelStyle.LABEL, false);
         // Already translated to panel origin by extractContents.
         graphics.text(font, Component.translatable("gui.bobbypipes.pattern.resources"),
-                8, 80, 0xFF_40_40_40, false);
+                8, 80, PanelStyle.LABEL, false);
     }
 
     @Override
