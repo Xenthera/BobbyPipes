@@ -149,9 +149,9 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
-    // Sibling mod for testing pipes against real containers. localRuntime, not
-    // implementation, so no bobbypipes code can accidentally depend on it and the mod
-    // stays optional. Gradle substitutes this for the ../bobbychests build output.
+    implementation "com.bobby.bobbycore:bobbycore:${bobbycore_version}"
+
+    // Optional sibling for pipes-vs-chests testing in runClient.
     localRuntime 'com.bobby.bobbychests:bobbychests:1.0.0'
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
@@ -274,10 +274,15 @@ tasks.register('packageModZip', Zip) {
     }
 
     // Sibling chests mod when a local build is already present (same localRuntime as runClient).
-    from(fileTree(dir: "${rootDir}/../bobbychests/build/libs",
-            includes: ['*.jar'],
-            excludes: ['*-sources.jar', '*-javadoc.jar', '*-slim.jar'])) {
-        into 'mods'
+    def bobbyChestsLibs = ["${rootDir}/../BobbyChests/build/libs", "${rootDir}/../bobbychests/build/libs"]
+            .collect { file(it) }
+            .find { it.directory }
+    if (bobbyChestsLibs != null) {
+        from(fileTree(dir: bobbyChestsLibs,
+                includes: ['*.jar'],
+                excludes: ['*-sources.jar', '*-javadoc.jar', '*-slim.jar'])) {
+            into 'mods'
+        }
     }
 
     // Full JEI runtime jar (not the -api jars) so MP clients/servers get recipe transfer.

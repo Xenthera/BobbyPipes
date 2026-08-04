@@ -33,3 +33,10 @@ Items move when you ask for them, not before. Built natively for NeoForge.
     ordering="NONE"
     # BOTH: modern JEI needs the mod on the server for recipe sync / transfer UI.
     side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="bobbycore"
+    type="required"
+    versionRange="[0.1.0,)"
+    ordering="NONE"
+    side="BOTH"

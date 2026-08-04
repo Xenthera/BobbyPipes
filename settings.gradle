@@ -8,9 +8,13 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// Sibling mod, loaded into the dev run so pipes can be tested against real chests.
-// Composite build: its jar is rebuilt automatically before a bobbypipes run, so there is
-// no stale-jar trap. Runtime only, nothing here compiles against it.
-if (file('../bobbychests/settings.gradle').exists()) {
-    includeBuild '../bobbychests'
+// Optional sibling for runClient. Use canonical path so IDEA sync keys match on-disk casing.
+def bobbyChests = [file('../BobbyChests'), file('../bobbychests')].find { it.exists() }
+if (bobbyChests != null) {
+    includeBuild bobbyChests.canonicalFile
+}
+
+def bobbyCore = [file('../BobbyCore'), file('../bobbycore')].find { it.exists() }
+if (bobbyCore != null) {
+    includeBuild bobbyCore.canonicalFile
 }

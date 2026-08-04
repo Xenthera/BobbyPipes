@@ -109,17 +109,6 @@ public final class CraftJobManager {
                 stillNeed -= forRequester;
                 acceptedForRequester += forRequester;
             }
-            Job job = new Job(
-                    nextJobId++,
-                    requestId,
-                    step.crafter().immutable(),
-                    requester.immutable(),
-                    step.output(),
-                    step.runs(),
-                    forRequester,
-                    step.inputs(),
-                    step.dependsOn());
-
             // Tell each upstream producer precisely what this step is owed. Without this
             // the output relied on an opportunistic scan and otherwise fell through to
             // "surplus", which meant intermediates ended up on the floor.
@@ -131,8 +120,32 @@ public final class CraftJobManager {
                     }
                 }
             }
-            producerFor.put(step.crafter().immutable(), job);
-            jobs.add(job);
+
+            // One crafter has one pattern, but the planner may still hand back two steps
+            // for it (e.g. a shared intermediate crafted once for a sibling's need and
+            // again for this step's own shortfall once that surplus ran out). Treating
+            // those as two Jobs orphans the first from producerFor as soon as the second
+            // is recorded, so anything resolved after that point attaches its owed claim
+            // to a job that can never produce enough to cover it. Folding the step into
+            // the existing job keeps one physical job per crafter per request, so owed
+            // totals always match what it will actually produce.
+            Job existing = producerFor.get(step.crafter().immutable());
+            if (existing != null) {
+                existing.mergeStep(step, forRequester);
+            } else {
+                Job job = new Job(
+                        nextJobId++,
+                        requestId,
+                        step.crafter().immutable(),
+                        requester.immutable(),
+                        step.output(),
+                        step.runs(),
+                        forRequester,
+                        step.inputs(),
+                        step.dependsOn());
+                producerFor.put(step.crafter().immutable(), job);
+                jobs.add(job);
+            }
         }
         return acceptedForRequester;
     }
@@ -1382,10 +1395,15 @@ public final class CraftJobManager {
         private final ItemResource output;
         private int runsRemaining;
         private int remainingForRequester;
-        /** Where each input comes from, decided at plan time rather than re-derived here. */
-        private final List<RequestPlan.Sourced<BlockPos, ItemResource>> inputs;
+        /**
+         * Where each input comes from, decided at plan time rather than re-derived here.
+         *
+         * <p>Not final: {@link #mergeStep} extends it when the planner hands back a second
+         * step for this same crafter.
+         */
+        private List<RequestPlan.Sourced<BlockPos, ItemResource>> inputs;
         /** Crafters whose output this job consumes; it cannot finish before they run. */
-        private final List<BlockPos> dependsOn;
+        private List<BlockPos> dependsOn;
         /** Stock still owed by each bound provider, so a provider is never over-pulled. */
         private final Map<StockBinding, Integer> stockRemaining = new java.util.LinkedHashMap<>();
         /** Output this job must hand to downstream crafters, from the plan bindings. */
@@ -1432,6 +1450,34 @@ public final class CraftJobManager {
                             new StockBinding(stock.provider(), input.item()),
                             input.amount(), Integer::sum);
                 }
+            }
+        }
+
+        /**
+         * Folds a second plan step for this same crafter into the job already tracking it.
+         *
+         * <p>Runs and the requester share simply add. Inputs (and any stock they bind) and
+         * dependsOn accumulate so gather, {@link #awaitsCraft}, and severed-link checks see
+         * the union of both steps rather than only the first.
+         */
+        private void mergeStep(RequestPlan.CraftStep<BlockPos, ItemResource> step, int forRequester) {
+            runsRemaining += step.runs();
+            remainingForRequester += forRequester;
+            List<RequestPlan.Sourced<BlockPos, ItemResource>> merged =
+                    new ArrayList<>(inputs);
+            merged.addAll(step.inputs());
+            inputs = List.copyOf(merged);
+            for (RequestPlan.Sourced<BlockPos, ItemResource> input : step.inputs()) {
+                if (input.origin() instanceof RequestPlan.Origin.Stock<BlockPos> stock) {
+                    stockRemaining.merge(
+                            new StockBinding(stock.provider(), input.item()),
+                            input.amount(), Integer::sum);
+                }
+            }
+            if (!step.dependsOn().isEmpty()) {
+                Set<BlockPos> deps = new LinkedHashSet<>(dependsOn);
+                deps.addAll(step.dependsOn());
+                dependsOn = List.copyOf(deps);
             }
         }
 
