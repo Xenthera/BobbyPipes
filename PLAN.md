@@ -33,26 +33,28 @@ satellite 330.
 **Nothing costs power yet, nothing moves fluid, and there is no chassis.** Those three are
 the bulk of what is left and each is broken out under Phase 6 below.
 
-**Unverified, and the current focus:** multi-step crafting chains. Every structural defect
-in the diagnosis below has been fixed in code, but nobody has run a chain in a real world
-since, and the executor still has no automated coverage. Treat it as untested, not as
-working. See "Crafting chains" below.
+**Multi-step crafting chains work.** Confirmed by play on 2026-08-03, including chains
+whose steps do not come from a Pattern Table. This was the long-standing broken feature and
+it is the rewrite in "Crafting chains" below that fixed it. The one thing still owed is
+automated coverage: `CraftJobManager` has no test of its own, so the next regression in it
+will be found the same way this bug was, by playing.
 
 > **On phase order.** The numbering is the original plan, kept so commit messages still
 > line up. Execution has interleaved 4, 4B, 5 and 6 rather than running them in order.
 
 ---
 
-## Crafting chains - diagnosed and rewritten, not yet re-tested
+## Crafting chains - fixed
 
-> **Status.** This section was written when chains were observed failing in game. Every row
-> of the table below has since been addressed, and the code no longer does the thing each
-> row describes: `CraftJobManager` no longer calls `supplyFor` at all, promises are bound at
-> plan time, and the planner runs provider, then surplus, then crafting. What has *not*
-> happened is a run in a real world to confirm it, and the executor still has no test of its
-> own. So the honest state is unverified rather than either broken or fixed. The diagnosis
-> is kept because it is the record of what was wrong and why the current shape is the way it
-> is.
+> **Status: working.** Every row of the table below was addressed, and chains were then
+> confirmed by play on 2026-08-03, multi-step and including steps not authored at a Pattern
+> Table. `CraftJobManager` no longer calls `supplyFor` at all, promises are bound at plan
+> time, and the planner runs provider, then surplus, then crafting.
+>
+> The diagnosis is kept as the record of what was wrong and why the current shape is the way
+> it is. Two items in the fix plan are still open, and neither is a known fault: the
+> executor has no test of its own, and upstream gating is still per-crafter ordering with a
+> timeout freeze rather than real dependency gating.
 
 101 unit tests passed while the feature failed in game. The reason was structural:
 `CraftChainSimulator` is described in its own javadoc as a "Minecraft-free stand-in for
@@ -285,9 +287,10 @@ Everything below is breadth.
 
 ## Phase 6 - Breadth
 
-- [~] Crafter pipes + multi-step crafting chains - BROKEN, see top of file  -  pattern table, crafting pipe,
-      `CraftJobManager`, `NetworkSupply.recipesFor` publishes live patterns
-- [~] Satellite pipes (unique names, one satellite / slots 6-8, deliver-and-wait) - blocked on the chain fix.
+- [x] Crafter pipes + multi-step crafting chains - pattern table, crafting pipe,
+      `CraftJobManager`, `NetworkSupply.recipesFor` publishes live patterns. Confirmed by
+      play 2026-08-03; see "Crafting chains" at the top of the file for the rewrite.
+- [x] Satellite pipes (unique names, one satellite / slots 6-8, deliver-and-wait).
       Pattern Table is LP LCT-style (ghost matrix, resource buffer, real craft).
       Firewall / quicksort still open
 - [x] Passive supplier pipe - same ghost targets as the Supplier, but a sink rather than a
