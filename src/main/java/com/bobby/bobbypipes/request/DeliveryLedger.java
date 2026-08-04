@@ -97,10 +97,11 @@ public final class DeliveryLedger<N, I> {
     }
 
     /**
-     * How much of {@code item} is already spoken for from {@code source}.
+     * How much of {@code item} is still owed from {@code source} on open promises
+     * (already extracted into transit).
      *
-     * <p>The planner subtracts this from real stock so a second request cannot be planned
-     * against items the first one already claimed.
+     * <p>Free stock uses the send queue for not-yet-extracted claims; this figure is for
+     * promise accounting and diagnostics, not for subtracting from chest counts again.
      */
     public int reserved(N source, I item) {
         return open.values().stream()

@@ -19,9 +19,9 @@ import java.util.Optional;
  *
  * <p>Parcels survive the network changing underneath them. Each one records the routing
  * revision its next hop was computed against; when that no longer matches the live
- * snapshot the parcel re-asks from wherever it currently sits. A parcel whose destination
- * disappeared is reported as stranded rather than silently deleted, so the caller can
- * decide whether to return it to sender or drop it in the world.
+ * snapshot the parcel re-asks from wherever it currently sits. A parcel is stranded only
+ * when its destination is no longer reachable from a still-valid perch  -  breaking an
+ * unrelated spur must not eject transfers that can still finish their trip.
  *
  * @param <N> node identity
  * @param <P> payload type
@@ -93,7 +93,7 @@ public final class ParcelTracker<N, P> {
             // Already there. Still issue a parcel so the caller gets a delivery callback
             // through the same path as any other request.
             long id = nextId++;
-            parcels.put(id, new Parcel<>(id, payload, to, from, null, 0, routes.revision()));
+            parcels.put(id, new Parcel<>(id, payload, from, to, from, null, 0, routes.revision()));
             return Optional.of(id);
         }
         Optional<N> firstHop = routes.nextHop(from, to);
@@ -101,7 +101,7 @@ public final class ParcelTracker<N, P> {
             return Optional.empty();
         }
         long id = nextId++;
-        parcels.put(id, new Parcel<>(id, payload, to, from, firstHop.get(), 0, routes.revision()));
+        parcels.put(id, new Parcel<>(id, payload, from, to, from, firstHop.get(), 0, routes.revision()));
         return Optional.of(id);
     }
 
@@ -140,12 +140,14 @@ public final class ParcelTracker<N, P> {
                 continue;
             }
 
-            // The network may have been rebuilt since this parcel last looked. Re-ask
-            // from where it actually is rather than trusting a hop that may now lead
-            // into a gap.
             if (current.revision() != routes.revision()) {
-                N rerouted = routes.nextHop(current.atNode(), current.destination()).orElse(null);
-                current = current.withRoute(rerouted, routes.revision());
+                current = reseatAfterTopologyChange(current, routes);
+            }
+
+            if (current.hasArrived()) {
+                delivered.add(new Delivery<>(current.id(), current.payload(), current.destination()));
+                finished.add(current.id());
+                continue;
             }
 
             if (current.isStuck()) {
@@ -158,6 +160,26 @@ public final class ParcelTracker<N, P> {
             current = current.advanced();
             if (current.ticksIntoHop() >= ticksPerHop) {
                 N arrivedAt = current.nextHop();
+                if (!routes.contains(arrivedAt)) {
+                    // Landing pad vanished mid-hop. Reseat from the pipe we still occupy;
+                    // only strand if the destination is truly cut off.
+                    current = reseatAfterTopologyChange(
+                            current.withRoute(null, routes.revision()), routes);
+                    if (current.hasArrived()) {
+                        delivered.add(new Delivery<>(
+                                current.id(), current.payload(), current.destination()));
+                        finished.add(current.id());
+                        continue;
+                    }
+                    if (current.isStuck()) {
+                        stranded.add(new Stranded<>(current.id(), current.payload(),
+                                current.atNode(), current.destination()));
+                        finished.add(current.id());
+                        continue;
+                    }
+                    updated.add(current);
+                    continue;
+                }
                 if (arrivedAt.equals(current.destination())) {
                     delivered.add(new Delivery<>(current.id(), current.payload(), current.destination()));
                     finished.add(current.id());
@@ -165,6 +187,12 @@ public final class ParcelTracker<N, P> {
                 }
                 N onward = routes.nextHop(arrivedAt, current.destination()).orElse(null);
                 current = current.movedToNextHop(onward);
+                if (current.isStuck()) {
+                    stranded.add(new Stranded<>(current.id(), current.payload(),
+                            current.atNode(), current.destination()));
+                    finished.add(current.id());
+                    continue;
+                }
             }
             updated.add(current);
         }
@@ -172,5 +200,51 @@ public final class ParcelTracker<N, P> {
         updated.forEach(parcel -> parcels.put(parcel.id(), parcel));
         finished.forEach(parcels::remove);
         return new TickReport<>(List.copyOf(delivered), List.copyOf(stranded));
+    }
+
+    /**
+     * Recomputes the next hop after a topology rebuild.
+     *
+     * <p>Strands only when the destination cannot be reached from a still-valid perch.
+     * If the pipe under the parcel was removed but its in-progress {@code nextHop} still
+     * exists, the parcel snaps forward onto that hop and continues.
+     */
+    private static <N, P> Parcel<N, P> reseatAfterTopologyChange(Parcel<N, P> parcel,
+                                                                 RoutingSnapshot<N> routes) {
+        long revision = routes.revision();
+        N at = parcel.atNode();
+        N dest = parcel.destination();
+        N hop = parcel.nextHop();
+
+        if (routes.contains(at)) {
+            if (at.equals(dest)) {
+                return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
+                        at, null, 0, revision);
+            }
+            // Prefer the hop already in progress when it still leads to the destination so
+            // breaking an unrelated spur does not restart interpolation mid-pipe.
+            if (hop != null
+                    && routes.contains(hop)
+                    && routes.topology().neighbours(at).containsKey(hop)
+                    && (hop.equals(dest) || routes.canReach(hop, dest))) {
+                return parcel.withRoute(hop, revision);
+            }
+            Optional<N> next = routes.nextHop(at, dest);
+            return parcel.withRoute(next.orElse(null), revision);
+        }
+
+        // Pipe under us is gone. Advance onto the hop we were already crossing if it still
+        // exists and can finish the trip (or is the destination).
+        if (hop != null && routes.contains(hop)) {
+            if (hop.equals(dest)) {
+                return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
+                        hop, null, 0, revision);
+            }
+            Optional<N> next = routes.nextHop(hop, dest);
+            return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
+                    hop, next.orElse(null), 0, revision);
+        }
+
+        return parcel.withRoute(null, revision);
     }
 }

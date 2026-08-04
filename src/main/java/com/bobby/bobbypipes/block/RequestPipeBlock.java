@@ -1,15 +1,34 @@
 package com.bobby.bobbypipes.block;
 
+import com.bobby.bobbypipes.menu.RequestMenus;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+
 /**
- * A pipe that requests items from the network and delivers them into the inventories
- * touching it.
- *
- * <p>The screen for driving it comes with the GUI work. Until then requests are placed
- * through the debug command, which targets a request pipe by position.
+ * A routed pipe that requests items from the network and delivers them into the
+ * inventories touching it.
  */
-public class RequestPipeBlock extends PipeBlock {
+public class RequestPipeBlock extends RoutedPipeBlock {
 
     public RequestPipeBlock(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    protected boolean openPipeScreen(ServerPlayer player, Level level, BlockPos pos) {
+        RequestMenus.open(player, pos);
+        return true;
+    }
+
+    /**
+     * The one pipe that opens on a bare right click.
+     *
+     * <p>It holds no configuration and gets used constantly, so requiring the Wrench every
+     * time would be friction for no benefit. The Wrench opens it too.
+     */
+    @Override
+    protected boolean opensWithoutWrench() {
+        return true;
     }
 }

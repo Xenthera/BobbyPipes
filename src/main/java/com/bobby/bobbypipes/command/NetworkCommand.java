@@ -4,9 +4,7 @@ import com.bobby.bobbypipes.network.PipeNetwork;
 import com.bobby.bobbypipes.network.RouteTable;
 import com.bobby.bobbypipes.network.RequestService;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
-import com.bobby.bobbypipes.request.Demand;
 import com.bobby.bobbypipes.request.RequestPlan;
-import com.bobby.bobbypipes.request.RequestPlanner;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -26,9 +24,6 @@ import java.util.Optional;
 
 /**
  * Debug view of the routing layer.
- *
- * <p>The network has no player-facing surface yet, so this is how its behaviour gets
- * checked in a real world rather than only in unit tests.
  *
  * <pre>
  *   /bobbypipes network                report the network containing the nearest pipe
@@ -64,7 +59,9 @@ public final class NetworkCommand {
                                 .then(Commands.argument("item", IdentifierArgument.id())
                                         .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                                 .executes(context -> request(context, true))))))
-                .then(Commands.literal("parcels").executes(NetworkCommand::reportParcels)));
+                .then(Commands.literal("parcels").executes(NetworkCommand::reportParcels))
+                .then(Commands.literal("jobs").executes(NetworkCommand::reportJobs))
+                .then(Commands.literal("drift").executes(NetworkCommand::reportDrift)));
     }
 
     private static int reportNetwork(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
@@ -135,16 +132,14 @@ public final class NetworkCommand {
             return 0;
         }
 
-        PipeNetwork network = PipeNetwork.get(level);
-        if (!network.rebuildNow(at).contains(at)) {
+        RequestService.Outcome outcome =
+                RequestService.request(level, at, ItemResource.of(item), count, commit);
+        if (!outcome.hasPipe()) {
             reply(context, "No pipe at " + format(at) + " to request from.");
             return 0;
         }
 
-        ItemResource wanted = ItemResource.of(item);
-        RequestPlan<BlockPos, ItemResource> plan = RequestPlanner.plan(
-                new Demand<>(wanted, count), network.supplyFor(at));
-
+        RequestPlan<BlockPos, ItemResource> plan = outcome.plan();
         reply(context, "Request " + count + " " + itemId + " at " + format(at) + ":");
         if (plan.withdrawals().isEmpty()) {
             reply(context, "  nothing found on the network");
@@ -162,10 +157,58 @@ public final class NetworkCommand {
             return plan.isComplete() ? 1 : 0;
         }
 
-        RequestService.Commitment commitment = RequestService.commit(level, network, plan, at);
+        RequestService.Commitment commitment = outcome.commitment();
         reply(context, "  shipped " + commitment.shipped() + " of " + commitment.requested()
                 + (commitment.isComplete() ? "" : ", short by " + commitment.shortfall()));
         return commitment.shipped();
+    }
+
+    /**
+     * Prints every item drifting through plain pipe.
+     *
+     * <p>Shows where each one is, where it is headed, and which side it arrived through,
+     * which is what distinguishes a genuine reversal from an item being ejected and
+     * re-inserted by whatever fed the pipe.
+     */
+    private static int reportDrift(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
+        ServerLevel level = context.getSource().getLevel();
+        var drift = PipeNetwork.get(level).drift();
+        if (drift.inFlight() == 0) {
+            reply(context, "Nothing drifting in plain pipe.");
+            return 0;
+        }
+        reply(context, drift.inFlight() + " item(s) drifting:");
+        for (var item : drift.items()) {
+            reply(context, "  " + item.count() + "x " + item.item().toStack(1).getHoverName().getString()
+                    + " at " + format(item.at())
+                    + (item.next() == null ? " (choosing)" : " -> " + format(item.next()))
+                    + " entered from " + (item.cameFrom() == null ? "insert" : item.cameFrom().getName())
+                    + ", hop " + item.hops());
+        }
+        return drift.inFlight();
+    }
+
+    /**
+     * Prints what every craft job is waiting on.
+     *
+     * <p>Same information the debug overlay shows, in a form that can be copied out of
+     * chat and pasted into a bug report.
+     */
+    private static int reportJobs(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
+        ServerLevel level = context.getSource().getLevel();
+        PipeNetwork network = PipeNetwork.get(level);
+        List<com.bobby.bobbypipes.network.CraftJobManager.JobReport> entries =
+                network.craftJobs().describe(level, network);
+        if (entries.isEmpty()) {
+            reply(context, "No active craft jobs.");
+            return 0;
+        }
+        reply(context, entries.size() + " craft job(s):");
+        for (var entry : entries) {
+            reply(context, "  " + format(entry.crafter()) + "  " + entry.headline());
+            entry.detail().forEach(detail -> reply(context, "      " + detail));
+        }
+        return entries.size();
     }
 
     /** Reports what is currently moving, which is otherwise invisible until rendering lands. */

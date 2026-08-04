@@ -56,7 +56,7 @@ class RequestPlannerTest {
 
         assertTrue(plan.isComplete());
         assertEquals(1, plan.withdrawals().size());
-        assertEquals(10, plan.withdrawnTotal("iron"));
+        assertEquals(10, plan.stockPulledTotal("iron"));
         assertTrue(plan.crafts().isEmpty());
     }
 
@@ -86,7 +86,7 @@ class RequestPlannerTest {
 
         assertFalse(plan.isComplete());
         assertEquals(List.of(want("iron", 7)), plan.missing());
-        assertEquals(3, plan.withdrawnTotal("iron"), "the partial pull is still planned");
+        assertEquals(3, plan.stockPulledTotal("iron"), "the partial pull is still planned");
     }
 
     @Test
@@ -102,7 +102,7 @@ class RequestPlannerTest {
         assertEquals(1, plan.crafts().size());
         assertEquals("crafter", plan.crafts().getFirst().crafter());
         assertEquals(1, plan.crafts().getFirst().runs());
-        assertEquals(9, plan.withdrawnTotal("ingot"));
+        assertEquals(9, plan.stockPulledTotal("ingot"));
     }
 
     @Test
@@ -117,10 +117,34 @@ class RequestPlannerTest {
         RequestPlan<String, String> plan = RequestPlanner.plan(want("block", 2), supply);
 
         assertTrue(plan.isComplete());
-        assertEquals(18, plan.withdrawnTotal("ore"));
+        assertEquals(18, plan.stockPulledTotal("ore"));
         assertEquals(2, plan.crafts().size());
         assertEquals(18, findRuns(plan, "ingot"));
         assertEquals(2, findRuns(plan, "block"));
+    }
+
+    @Test
+    @DisplayName("three crafting tables: log->plank->stick->ladder ordered leaf-first")
+    void plansThreeCrafterChain() {
+        // Ratios match vanilla-ish: 1 log->4 planks, 2 planks->4 sticks, 7 sticks->3 ladders.
+        FakeSupply supply = new FakeSupply()
+                .stock("chest", "log", 64)
+                .recipe("tableA", "plank", 4, want("log", 1))
+                .recipe("tableB", "stick", 4, want("plank", 2))
+                .recipe("tableC", "ladder", 3, want("stick", 7));
+
+        RequestPlan<String, String> plan = RequestPlanner.plan(want("ladder", 1), supply);
+
+        assertTrue(plan.isComplete());
+        assertEquals(List.of("tableA", "tableB", "tableC"),
+                plan.crafts().stream().map(RequestPlan.CraftStep::crafter).toList(),
+                "intermediates must be scheduled before the final craft");
+        assertEquals(1, findRuns(plan, "plank"));
+        assertEquals(2, findRuns(plan, "stick"));
+        assertEquals(1, findRuns(plan, "ladder"));
+        assertEquals(1, plan.stockPulledTotal("log"));
+        assertEquals(0, plan.stockPulledTotal("plank"));
+        assertEquals(0, plan.stockPulledTotal("stick"));
     }
 
     @Test
@@ -135,7 +159,7 @@ class RequestPlannerTest {
 
         assertTrue(plan.isComplete());
         assertEquals(3, findRuns(plan, "stick"));
-        assertEquals(6, plan.withdrawnTotal("plank"));
+        assertEquals(6, plan.stockPulledTotal("plank"));
     }
 
     @Test
@@ -150,8 +174,11 @@ class RequestPlannerTest {
 
         assertFalse(plan.isComplete());
         assertEquals(3, findRuns(plan, "stick"));
-        assertEquals(6, plan.withdrawnTotal("plank"));
-        assertEquals(List.of(want("stick", 8)), plan.missing());
+        assertEquals(6, plan.stockPulledTotal("plank"));
+        // The shortfall is reported as the raw material that ran out, not as the item
+        // that could not be finished. 8 more sticks is 2 more runs, which needs 4 planks,
+        // and every plank on the network is already claimed by the 3 runs above.
+        assertEquals(List.of(want("plank", 4)), plan.missing());
     }
 
     @Test
@@ -181,7 +208,7 @@ class RequestPlannerTest {
 
         assertFalse(plan.isComplete());
         assertTrue(plan.crafts().isEmpty());
-        assertTrue(plan.withdrawnTotal("iron") <= 10, "cannot claim more iron than exists");
+        assertTrue(plan.stockPulledTotal("iron") <= 10, "cannot claim more iron than exists");
     }
 
     @Test
@@ -209,7 +236,7 @@ class RequestPlannerTest {
         RequestPlan<String, String> plan = RequestPlanner.plan(want("block", 1), supply);
 
         assertTrue(plan.isComplete());
-        assertEquals(9, plan.withdrawnTotal("ingot"));
+        assertEquals(9, plan.stockPulledTotal("ingot"));
     }
 
     @Test
@@ -239,7 +266,42 @@ class RequestPlannerTest {
 
         assertTrue(plan.isComplete());
         assertTrue(plan.crafts().isEmpty(), "no reason to craft what is already on a shelf");
-        assertEquals(10, plan.withdrawnTotal("stick"));
+        assertEquals(10, plan.stockPulledTotal("stick"));
+    }
+
+    @Test
+    @DisplayName("partial stock is taken before crafting the remainder (1 log -> 4 planks)")
+    void prefersStockThenCraftsRemainder() {
+        // 3 planks on the network, want 5. Recipe makes 4 per log -> one craft run.
+        FakeSupply supply = new FakeSupply()
+                .stock("chest", "plank", 3)
+                .stock("chest", "log", 10)
+                .recipe("crafter", "plank", 4, want("log", 1));
+
+        RequestPlan<String, String> plan = RequestPlanner.plan(want("plank", 5), supply);
+
+        assertTrue(plan.isComplete());
+        assertEquals(3, plan.stockPulledTotal("plank"));
+        assertEquals(1, findRuns(plan, "plank"));
+        assertEquals(1, plan.stockPulledTotal("log"));
+        assertEquals(4, plan.crafts().getFirst().outputPerRun());
+        assertEquals(4, plan.crafts().getFirst().totalOutput());
+    }
+
+    @Test
+    @DisplayName("craft runs round up so request 5 planks pulls 2 logs")
+    void craftsTwoRunsForFivePlanks() {
+        FakeSupply supply = new FakeSupply()
+                .stock("chest", "log", 10)
+                .recipe("crafter", "plank", 4, want("log", 1));
+
+        RequestPlan<String, String> plan = RequestPlanner.plan(want("plank", 5), supply);
+
+        assertTrue(plan.isComplete());
+        assertEquals(0, plan.stockPulledTotal("plank"));
+        assertEquals(2, findRuns(plan, "plank"));
+        assertEquals(2, plan.stockPulledTotal("log"));
+        assertEquals(8, plan.crafts().getFirst().totalOutput(), "over-produces; surplus is a routing concern");
     }
 
     private static int findRuns(RequestPlan<String, String> plan, String output) {

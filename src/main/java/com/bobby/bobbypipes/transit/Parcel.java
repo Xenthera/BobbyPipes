@@ -13,6 +13,8 @@ package com.bobby.bobbypipes.transit;
  *
  * @param id           identity, unique within the tracker that issued it
  * @param payload      what is being carried
+ * @param origin       where it entered the network, so the first hop can start at the
+ *                     inventory it was drawn from rather than at a pipe centre
  * @param destination  where it is headed
  * @param atNode       the node it currently occupies
  * @param nextHop      the node it is moving toward, or null if it has nowhere to go
@@ -24,6 +26,7 @@ package com.bobby.bobbypipes.transit;
 public record Parcel<N, P>(
         long id,
         P payload,
+        N origin,
         N destination,
         N atNode,
         N nextHop,
@@ -51,14 +54,14 @@ public record Parcel<N, P>(
     }
 
     Parcel<N, P> withRoute(N newNextHop, long newRevision) {
-        return new Parcel<>(id, payload, destination, atNode, newNextHop, ticksIntoHop, newRevision);
+        return new Parcel<>(id, payload, origin, destination, atNode, newNextHop, ticksIntoHop, newRevision);
     }
 
     Parcel<N, P> advanced() {
-        return new Parcel<>(id, payload, destination, atNode, nextHop, ticksIntoHop + 1, revision);
+        return new Parcel<>(id, payload, origin, destination, atNode, nextHop, ticksIntoHop + 1, revision);
     }
 
     Parcel<N, P> movedToNextHop(N newNextHop) {
-        return new Parcel<>(id, payload, destination, nextHop, newNextHop, 0, revision);
+        return new Parcel<>(id, payload, origin, destination, nextHop, newNextHop, 0, revision);
     }
 }

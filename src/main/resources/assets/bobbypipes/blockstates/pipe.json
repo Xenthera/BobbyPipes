@@ -1,11 +1,110 @@
 {
   "multipart": [
-    { "apply": { "model": "bobbypipes:block/pipe_core" } },
-    { "when": { "north": "true" }, "apply": { "model": "bobbypipes:block/pipe_arm" } },
-    { "when": { "east":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 90 } },
-    { "when": { "south": "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 180 } },
-    { "when": { "west":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "y": 270 } },
-    { "when": { "up":    "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "x": 270 } },
-    { "when": { "down":  "true" }, "apply": { "model": "bobbypipes:block/pipe_arm", "x": 90 } }
+    {
+      "when": {
+        "north": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm"
+      }
+    },
+    {
+      "when": {
+        "east": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "south": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "west": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "up": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "down": "inventory|direct|indirect"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "x": 90
+      }
+    },
+    {
+      "when": {
+        "north": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap"
+      }
+    },
+    {
+      "when": {
+        "east": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "south": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "west": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "up": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "down": "none"
+      },
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "x": 90
+      }
+    }
   ]
 }

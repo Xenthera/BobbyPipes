@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "bobbypipes:block/passive_supplier_pipe_inventory"
+  }
+}

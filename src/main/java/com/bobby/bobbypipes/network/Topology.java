@@ -96,6 +96,16 @@ public final class Topology<N> {
         return components;
     }
 
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof Topology<?> other && links.equals(other.links);
+    }
+
+    @Override
+    public int hashCode() {
+        return links.hashCode();
+    }
+
     public static final class Builder<N> {
 
         private final Map<N, Map<N, Integer>> links = new HashMap<>();

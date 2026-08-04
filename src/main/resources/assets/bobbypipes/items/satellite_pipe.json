@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "bobbypipes:block/satellite_pipe_inventory"
+  }
+}

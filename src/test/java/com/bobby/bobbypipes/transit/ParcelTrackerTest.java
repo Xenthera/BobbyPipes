@@ -132,6 +132,83 @@ class ParcelTrackerTest {
     }
 
     @Test
+    @DisplayName("a dumb junction breaking the corridor strands in-flight parcels")
+    void junctionBreakStrandsWhenCorridorGone() {
+        // P - a - b - R is a corridor; branching at b removes that corridor from transit.
+        // Parcels must not keep routing across the dumb junction.
+        ParcelTracker<String, String> tracker = new ParcelTracker<>(4);
+        RoutingSnapshot<String> line = RoutingSnapshot.of(Topology.<String>builder()
+                .link("P", "a")
+                .link("a", "b")
+                .link("b", "R")
+                .build(), 1);
+        tracker.inject("iron", "P", "R", line);
+        tracker.tick(line);
+        tracker.tick(line);
+
+        // Same shape as DirectCorridors.transitTopology after the branch: smarts only.
+        RoutingSnapshot<String> corridorBroken = RoutingSnapshot.of(Topology.<String>builder()
+                .node("P")
+                .node("R")
+                .build(), 2);
+
+        ParcelTracker.TickReport<String, String> report = tracker.tick(corridorBroken);
+
+        assertEquals(1, report.stranded().size(), "dumb junction must cut the routed network");
+        assertTrue(report.delivered().isEmpty());
+    }
+
+    @Test
+    @DisplayName("breaking an unrelated spur does not eject a parcel whose path is intact")
+    void spurBreakDoesNotStrand() {
+        // main: a - b - c - goal, spur: b - spur. Parcel a->goal, then spur is removed.
+        ParcelTracker<String, String> tracker = new ParcelTracker<>(2);
+        RoutingSnapshot<String> withSpur = RoutingSnapshot.of(Topology.<String>builder()
+                .link("a", "b")
+                .link("b", "c")
+                .link("c", "goal")
+                .link("b", "spur")
+                .build(), 1);
+        tracker.inject("iron", "a", "goal", withSpur);
+        tracker.tick(withSpur);
+
+        RoutingSnapshot<String> spurGone = RoutingSnapshot.of(Topology.<String>builder()
+                .link("a", "b")
+                .link("b", "c")
+                .link("c", "goal")
+                .build(), 2);
+
+        ParcelTracker.TickReport<String, String> report =
+                runUntilSettled(tracker, spurGone, 100);
+
+        assertEquals(1, report.delivered().size());
+        assertTrue(report.stranded().isEmpty(), "unrelated spur break must not eject transfers");
+    }
+
+    @Test
+    @DisplayName("breaking the only bridge strands a parcel that can no longer reach dest")
+    void bridgeBreakStrands() {
+        ParcelTracker<String, String> tracker = new ParcelTracker<>(2);
+        RoutingSnapshot<String> intact = RoutingSnapshot.of(Topology.<String>builder()
+                .link("a", "bridge")
+                .link("bridge", "goal")
+                .build(), 1);
+        tracker.inject("iron", "a", "goal", intact);
+        tracker.tick(intact);
+
+        // Bridge removed; a and goal remain as disconnected nodes.
+        RoutingSnapshot<String> cut = RoutingSnapshot.of(Topology.<String>builder()
+                .node("a")
+                .node("goal")
+                .build(), 2);
+
+        ParcelTracker.TickReport<String, String> report = tracker.tick(cut);
+
+        assertEquals(1, report.stranded().size());
+        assertTrue(report.delivered().isEmpty());
+    }
+
+    @Test
     @DisplayName("a parcel whose destination disappears is stranded, not silently dropped")
     void strandsWhenDestinationIsGone() {
         // The caller needs to know so it can spit the items into the world rather than

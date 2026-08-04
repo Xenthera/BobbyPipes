@@ -1,30 +1,42 @@
 package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.PipeBlock;
+import com.bobby.bobbypipes.block.PipeConnection;
+import com.bobby.bobbypipes.block.RoutedPipeBlock;
+import com.bobby.bobbypipes.menu.AutocraftMonitorMenus;
+import com.bobby.bobbypipes.network.payload.CraftStatusPayload;
+import com.bobby.bobbypipes.network.payload.ParcelSyncPayload;
 import com.bobby.bobbypipes.request.DeliveryLedger;
 import com.bobby.bobbypipes.transit.ItemShipment;
+import com.bobby.bobbypipes.transit.Parcel;
 import com.bobby.bobbypipes.transit.ParcelTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
- * The pipe network for one level: reads pipes out of the world into a {@link Topology}
- * and keeps the solved routes in a {@link RoutingCache}.
+ * The pipe network for one level.
  *
- * <p>One instance per {@link ServerLevel}. Networks do not currently cross dimensions, so
- * a block position is enough to identify a node, and block positions are stable across
- * reloads for free.
+ * <p>Routing follows Logistics Pipes corridors: smart pipes see each other only across
+ * unbranched runs of plain pipe ({@link DirectCorridors#transitTopology}). A dumb
+ * T-junction breaks that run, so the arms are separate networks until a smart pipe sits
+ * on the junction. Green/red marks use the same corridor rule.
  */
 public final class PipeNetwork {
 
@@ -37,16 +49,37 @@ public final class PipeNetwork {
     /** Cap on a single graph read, so a pathological world cannot stall the server. */
     private static final int MAX_NODES = 20_000;
 
-    /** Ticks a parcel spends crossing one pipe. */
-    private static final int TICKS_PER_HOP = 5;
+    /**
+     * Ticks a parcel spends crossing one pipe.
+     *
+     * <p>Base tier speed  -  slow enough to read, and to leave headroom for faster pipe
+     * tiers later. At 20 tps this is 0.4s per block (1.5x the original 12-tick hop).
+     */
+    private static final int TICKS_PER_HOP = 8;
 
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
     private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
     private final ParcelTracker<BlockPos, ItemShipment> parcels = new ParcelTracker<>(TICKS_PER_HOP);
+    private final DriftTracker drift;
+    private final ProviderSendQueue sendQueue = new ProviderSendQueue();
+    private final CraftJobManager craftJobs = new CraftJobManager();
+
+    /** Last scanned pipe lattice; used to paint routed-exit marks after a rebuild. */
+    private Topology<BlockPos> lastLattice = Topology.empty();
+    private Set<BlockPos> lastSmart = Set.of();
+
+    /** Avoid spamming empty parcel snapshots once the network is quiet. */
+    private boolean lastParcelSyncWasEmpty = true;
 
     private PipeNetwork(ServerLevel level) {
         this.level = level;
+        this.drift = new DriftTracker(level);
+    }
+
+    /** Items wandering through plain pipe, outside the planned network. */
+    public DriftTracker drift() {
+        return drift;
     }
 
     /** Outstanding promises on this network. */
@@ -59,9 +92,37 @@ public final class PipeNetwork {
         return parcels;
     }
 
+    /** Withdrawals waiting to leave providers at their send rate. */
+    public ProviderSendQueue sendQueue() {
+        return sendQueue;
+    }
+
+    /** Autocraft jobs waiting on inputs or mid-chain. */
+    public CraftJobManager craftJobs() {
+        return craftJobs;
+    }
+
     /** A view of what this network can offer {@code requester}, nearest provider first. */
     public NetworkSupply supplyFor(BlockPos requester) {
-        return new NetworkSupply(level, cache.current(), requester, ledger);
+        return new NetworkSupply(level, cache.current(), requester, sendQueue);
+    }
+
+    /**
+     * Like {@link #supplyFor(BlockPos)}, but never offers stock from {@code excludedStores}
+     * (used by Supplier pipes so they cannot restock by draining their own chest).
+     */
+    public NetworkSupply supplyFor(BlockPos requester, Set<Object> excludedStores) {
+        return new NetworkSupply(level, cache.current(), requester, sendQueue, excludedStores);
+    }
+
+    /**
+     * Items already queued or flying toward {@code dest} (not yet inserted).
+     *
+     * <p>Suppliers subtract this from their shortfall so they do not re-order while a
+     * previous restock is still in transit.
+     */
+    public int inboundTo(BlockPos dest, ItemResource item) {
+        return CraftJobManager.inboundTo(this, dest, item);
     }
 
     public static synchronized PipeNetwork get(ServerLevel level) {
@@ -73,6 +134,7 @@ public final class PipeNetwork {
         PipeNetwork network = INSTANCES.remove(level);
         if (network != null) {
             network.cache.clear();
+            network.drift.clear();
         }
     }
 
@@ -108,16 +170,222 @@ public final class PipeNetwork {
      */
     public boolean tick() {
         boolean rebuilt = cache.rebuildIfDirty();
+        if (rebuilt) {
+            applyArmMarks();
+        }
 
+        craftJobs.tick(level, this);
+        sendQueue.tick(level, ledger, parcels, cache.current());
         RequestService.handle(level, this, parcels.tick(cache.current()));
+        drift.tick(this);
+        syncParcels();
+        if (level.getGameTime() % 10 == 0) {
+            AutocraftMonitorMenus.syncOpenMenus(level);
+        }
+        syncCraftStatus();
 
         ledger.expire(level.getGameTime());
         return rebuilt;
     }
 
-    /** Forces an immediate read and solve. Used by the debug command. */
+    /**
+     * Pushes the current in-flight parcels to every player in this dimension.
+     *
+     * <p>Full replace each tick while anything is moving  -  fine for debug volumes.
+     * Sends one empty snapshot when the last parcel settles so clients clear leftovers.
+     */
+    /** How often the craft debug overlay refreshes. Text does not need per-tick updates. */
+    private static final int CRAFT_STATUS_INTERVAL = 10;
+
+    private boolean lastCraftStatusWasEmpty;
+
+    private void syncCraftStatus() {
+        if (level.players().isEmpty() || level.getGameTime() % CRAFT_STATUS_INTERVAL != 0) {
+            return;
+        }
+        List<CraftStatusPayload.Entry> entries = craftJobs.holograms(level, this);
+        if (entries.isEmpty()) {
+            // One empty packet clears the overlay; repeating it every tick would not.
+            if (!lastCraftStatusWasEmpty) {
+                PacketDistributor.sendToPlayersInDimension(level, new CraftStatusPayload(List.of()));
+                lastCraftStatusWasEmpty = true;
+            }
+            return;
+        }
+        lastCraftStatusWasEmpty = false;
+        PacketDistributor.sendToPlayersInDimension(level, new CraftStatusPayload(entries));
+    }
+
+    private void syncParcels() {
+        if (level.players().isEmpty()) {
+            return;
+        }
+        long gameTime = level.getGameTime();
+        if (parcels.inFlight() == 0 && drift.inFlight() == 0) {
+            if (!lastParcelSyncWasEmpty) {
+                PacketDistributor.sendToPlayersInDimension(
+                        level, new ParcelSyncPayload(TICKS_PER_HOP, gameTime, List.of()));
+                lastParcelSyncWasEmpty = true;
+            }
+            return;
+        }
+        lastParcelSyncWasEmpty = false;
+
+        List<ParcelSyncPayload.Entry> entries = new ArrayList<>(parcels.inFlight());
+        for (Parcel<BlockPos, ItemShipment> parcel : parcels.parcels()) {
+            ItemShipment shipment = parcel.payload();
+            ItemStack stack = shipment.resource().toStack(shipment.count());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            // Only the ends of a journey touch a container, so the arm offsets are sent
+            // only for those hops. Everything in between runs centre to centre, which is
+            // already a straight line through the arms joining two adjacent pipes.
+            //
+            // The entry arm is the one the shipment recorded when it was pulled, not
+            // whichever container happens to sit next to the origin. Guessing meant a
+            // parcel handed over by a drifting item  -  which came in through pipe and
+            // touched no container at all  -  started in some unrelated chest's arm and
+            // visibly jumped sideways to the pipe centre before setting off.
+            Optional<net.minecraft.core.Direction> enterFrom =
+                    parcel.atNode().equals(parcel.origin())
+                            ? Optional.ofNullable(shipment.entrySide())
+                            : Optional.empty();
+            Optional<net.minecraft.core.Direction> exitTo =
+                    parcel.nextHop() != null && parcel.nextHop().equals(parcel.destination())
+                            ? InventoryAccess.sideAccepting(
+                                    level, parcel.destination(), shipment.resource())
+                            : Optional.empty();
+
+            entries.add(new ParcelSyncPayload.Entry(
+                    parcel.id(),
+                    parcel.atNode(),
+                    Optional.ofNullable(parcel.nextHop()),
+                    parcel.ticksIntoHop(),
+                    stack,
+                    enterFrom,
+                    exitTo));
+        }
+        // Drifting items ride the same sync so they draw like anything else in a pipe.
+        // Their hop is slower, so progress is rescaled into parcel ticks rather than
+        // sending a second rate the renderer would have to special case.
+        for (DriftTracker.Drifting drifting : drift.items()) {
+            ItemStack stack = drifting.item().toStack(drifting.count());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            // An item with no next hop is parked: waiting at a routed pipe for the network
+            // to take it, or freshly inserted and about to pick a side. Skipping those made
+            // it vanish for a second at exactly the dumb-to-smart boundary and then pop back
+            // into existence at the pipe centre, so they are sent with no hop instead and
+            // the renderer rests them where they stand.
+            // An item leaving into a container runs out along one arm instead of on to
+            // another pipe. Sending its own position as the next node gives the renderer a
+            // path of centre -> arm, so it is animated out the same way a routed parcel is
+            // animated into its destination rather than vanishing at the pipe centre.
+            int legTicks = drifting.leaving() ? drift.armTicks() : drift.ticksPerHop();
+            int scaled = Math.round(
+                    drifting.ticksIntoHop() * (TICKS_PER_HOP / (float) legTicks));
+            // On its very first hop the side it came from is whatever pushed it in, so an
+            // item fed by a hopper sets off from that arm. On later hops that side is just
+            // the pipe behind it, and prepending its arm would draw the item backing up
+            // before moving on, so only the first hop gets one.
+            Optional<net.minecraft.core.Direction> pushedIn =
+                    drifting.hops() == 0 && drifting.cameFrom() != null
+                            && !isPipe(level, drifting.at().relative(drifting.cameFrom()))
+                            ? Optional.of(drifting.cameFrom())
+                            : Optional.empty();
+            entries.add(new ParcelSyncPayload.Entry(
+                    -drifting.id(),
+                    drifting.at(),
+                    drifting.leaving()
+                            ? Optional.of(drifting.at())
+                            : Optional.ofNullable(drifting.next()),
+                    Math.min(scaled, TICKS_PER_HOP),
+                    stack,
+                    pushedIn,
+                    Optional.ofNullable(drifting.exitTo())));
+        }
+
+        PacketDistributor.sendToPlayersInDimension(
+                level, new ParcelSyncPayload(TICKS_PER_HOP, gameTime, entries));
+    }
+
+    /**
+     * Forces an immediate read and solve.
+     *
+     * <p>No-ops when the corridor graph is unchanged so callers that poll (supplier
+     * restock, open menus) cannot republish a new revision every second and stall every
+     * in-flight parcel while the solver runs.
+     */
     public RoutingSnapshot<BlockPos> rebuildNow(BlockPos seed) {
-        return cache.publish(readWorld(seed));
+        Topology<BlockPos> topology = readWorld(seed);
+        RoutingSnapshot<BlockPos> current = cache.current();
+        if (topology.equals(current.topology())) {
+            return current;
+        }
+        RoutingSnapshot<BlockPos> snapshot = cache.publish(topology);
+        applyArmMarks();
+        return snapshot;
+    }
+
+    /**
+     * Paints green/red exit marks on routed pipes only.
+     *
+     * <p>Plain transport pipes never receive marks. Uses {@link Block#UPDATE_CLIENTS} so
+     * clients see the new marks without neighbour updates that would fight connection
+     * logic or retrigger a rebuild.
+     */
+    private void applyArmMarks() {
+        Set<DirectCorridors.Edge<BlockPos>> routedExits =
+                DirectCorridors.routedExits(lastLattice, lastSmart);
+
+        for (BlockPos pos : lastSmart) {
+            BlockState state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof RoutedPipeBlock)) {
+                continue;
+            }
+            BlockState updated = state;
+            for (Direction direction : Direction.values()) {
+                PipeConnection current = updated.getValue(PipeBlock.propertyFor(direction));
+                if (!current.isPipe()) {
+                    continue;
+                }
+                BlockPos neighbour = pos.relative(direction);
+                PipeConnection desired =
+                        routedExits.contains(new DirectCorridors.Edge<>(pos, neighbour))
+                                ? PipeConnection.DIRECT
+                                : PipeConnection.INDIRECT;
+                if (current != desired) {
+                    updated = updated.setValue(PipeBlock.propertyFor(direction), desired);
+                }
+            }
+            if (!updated.equals(state)) {
+                level.setBlock(pos, updated, Block.UPDATE_CLIENTS);
+            }
+        }
+
+        // Strip any leftover DIRECT marks from plain pipes in the lattice (e.g. worlds
+        // that had marks before routers were split out).
+        for (BlockPos pos : lastLattice.nodes()) {
+            if (lastSmart.contains(pos)) {
+                continue;
+            }
+            BlockState state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof PipeBlock) || state.getBlock() instanceof RoutedPipeBlock) {
+                continue;
+            }
+            BlockState updated = state;
+            for (Direction direction : Direction.values()) {
+                if (updated.getValue(PipeBlock.propertyFor(direction)) == PipeConnection.DIRECT) {
+                    updated = updated.setValue(PipeBlock.propertyFor(direction),
+                            PipeConnection.INDIRECT);
+                }
+            }
+            if (!updated.equals(state)) {
+                level.setBlock(pos, updated, Block.UPDATE_CLIENTS);
+            }
+        }
     }
 
     /** The next pipe to move toward when travelling from {@code from} to {@code to}. */
@@ -126,13 +394,51 @@ public final class PipeNetwork {
     }
 
     /**
-     * Walks the world outward from {@code seed} and builds the graph of connected pipes.
+     * Walks the world outward from {@code seed}, merges any other live components, then
+     * publishes the corridor transit graph (not the raw lattice).
      *
-     * <p>Only the component containing the seed is read. Unrelated pipe networks
-     * elsewhere in the level are left alone, which is what keeps a break in one network
-     * from costing anything in another.
+     * <p>The full lattice is kept for mark painting. Pathfinding uses only edges that lie
+     * on unbranched smart-to-smart corridors, so a plain-pipe junction does not join the
+     * networks on its arms.
+     *
+     * <p>Publishing only the seed's component used to wipe every other network in the
+     * level on a single place/break, which stranded unrelated parcels  -  hence the merge.
      */
     private Topology<BlockPos> readWorld(BlockPos seed) {
+        Topology.Builder<BlockPos> builder = Topology.builder();
+        Set<BlockPos> covered = new HashSet<>();
+        absorbComponent(seed, builder, covered);
+
+        // Previous snapshot nodes may be corridor intermediates; also re-scan from every
+        // smart pipe still in the world so disconnected components are not dropped.
+        for (BlockPos node : List.copyOf(cache.current().nodes())) {
+            if (covered.contains(node) || !isPipe(level, node)) {
+                continue;
+            }
+            absorbComponent(node, builder, covered);
+        }
+
+        Topology<BlockPos> lattice = builder.build();
+        lastLattice = lattice;
+        lastSmart = Set.copyOf(smartNodes(lattice));
+        return DirectCorridors.transitTopology(lattice, lastSmart);
+    }
+
+    /** Scans the component containing {@code seed} into {@code builder}. */
+    private void absorbComponent(BlockPos seed,
+                                 Topology.Builder<BlockPos> builder,
+                                 Set<BlockPos> covered) {
+        Topology<BlockPos> scanned = scanLattice(seed);
+        for (BlockPos node : scanned.nodes()) {
+            builder.node(node);
+            covered.add(node);
+            for (Map.Entry<BlockPos, Integer> edge : scanned.neighbours(node).entrySet()) {
+                builder.link(node, edge.getKey(), edge.getValue());
+            }
+        }
+    }
+
+    private Topology<BlockPos> scanLattice(BlockPos seed) {
         Topology.Builder<BlockPos> builder = Topology.builder();
         if (!isPipe(level, seed)) {
             // The seed pipe is gone, which is the normal case for a break. Start from
@@ -152,6 +458,16 @@ public final class PipeNetwork {
         }
         scanFrom(seed, builder);
         return builder.build();
+    }
+
+    private Set<BlockPos> smartNodes(Topology<BlockPos> lattice) {
+        Set<BlockPos> smart = new HashSet<>();
+        for (BlockPos pos : lattice.nodes()) {
+            if (PipeBlock.isSmartPipe(level.getBlockState(pos).getBlock())) {
+                smart.add(pos);
+            }
+        }
+        return smart;
     }
 
     private void scanFrom(BlockPos start, Topology.Builder<BlockPos> builder) {

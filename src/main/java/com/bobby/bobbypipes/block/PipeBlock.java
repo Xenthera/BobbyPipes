@@ -12,8 +12,7 @@ import net.minecraft.world.level.ScheduledTickAccess;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -31,18 +30,26 @@ import java.util.Map;
  *
  * <p>Connection state is visual and structural only. Routing reads the world directly, so a
  * mismatch between the drawn arms and the real graph cannot misroute anything, it would
- * only look wrong.
+ * only look wrong. Direct/indirect marks on pipe arms are filled in by the network after
+ * each topology rebuild; placement and neighbour updates only distinguish none / inventory /
+ * pipe.
  */
 public class PipeBlock extends Block {
 
-    public static final BooleanProperty NORTH = BlockStateProperties.NORTH;
-    public static final BooleanProperty EAST = BlockStateProperties.EAST;
-    public static final BooleanProperty SOUTH = BlockStateProperties.SOUTH;
-    public static final BooleanProperty WEST = BlockStateProperties.WEST;
-    public static final BooleanProperty UP = BlockStateProperties.UP;
-    public static final BooleanProperty DOWN = BlockStateProperties.DOWN;
+    public static final EnumProperty<PipeConnection> NORTH =
+            EnumProperty.create("north", PipeConnection.class);
+    public static final EnumProperty<PipeConnection> EAST =
+            EnumProperty.create("east", PipeConnection.class);
+    public static final EnumProperty<PipeConnection> SOUTH =
+            EnumProperty.create("south", PipeConnection.class);
+    public static final EnumProperty<PipeConnection> WEST =
+            EnumProperty.create("west", PipeConnection.class);
+    public static final EnumProperty<PipeConnection> UP =
+            EnumProperty.create("up", PipeConnection.class);
+    public static final EnumProperty<PipeConnection> DOWN =
+            EnumProperty.create("down", PipeConnection.class);
 
-    private static final Map<Direction, BooleanProperty> BY_DIRECTION =
+    private static final Map<Direction, EnumProperty<PipeConnection>> BY_DIRECTION =
             new EnumMap<>(Map.of(
                     Direction.NORTH, NORTH,
                     Direction.EAST, EAST,
@@ -51,24 +58,21 @@ public class PipeBlock extends Block {
                     Direction.UP, UP,
                     Direction.DOWN, DOWN));
 
-    // The core is wider than the arms so a junction reads as a node rather than a bulge
-    // in a uniform tube. These match the model exactly; if one changes so must the other.
-    private static final double CORE_MIN = 5.0;
-    private static final double CORE_MAX = 11.0;
-    private static final double ARM_MIN = 6.0;
-    private static final double ARM_MAX = 10.0;
+    // One width for the whole tube: no wider node at junctions. These match the model
+    // exactly; if one changes so must the other.
+    private static final double MIN = 4.5;
+    private static final double MAX = 11.5;
 
-    private static final VoxelShape CORE =
-            Block.box(CORE_MIN, CORE_MIN, CORE_MIN, CORE_MAX, CORE_MAX, CORE_MAX);
+    private static final VoxelShape CENTRE = Block.box(MIN, MIN, MIN, MAX, MAX, MAX);
 
-    /** Arm boxes reaching from the core out to each face. */
+    /** Arm boxes reaching from the centre section out to each face. */
     private static final Map<Direction, VoxelShape> ARMS = new EnumMap<>(Map.of(
-            Direction.NORTH, Block.box(ARM_MIN, ARM_MIN, 0.0, ARM_MAX, ARM_MAX, CORE_MIN),
-            Direction.SOUTH, Block.box(ARM_MIN, ARM_MIN, CORE_MAX, ARM_MAX, ARM_MAX, 16.0),
-            Direction.WEST, Block.box(0.0, ARM_MIN, ARM_MIN, CORE_MIN, ARM_MAX, ARM_MAX),
-            Direction.EAST, Block.box(CORE_MAX, ARM_MIN, ARM_MIN, 16.0, ARM_MAX, ARM_MAX),
-            Direction.DOWN, Block.box(ARM_MIN, 0.0, ARM_MIN, ARM_MAX, CORE_MIN, ARM_MAX),
-            Direction.UP, Block.box(ARM_MIN, CORE_MAX, ARM_MIN, ARM_MAX, 16.0, ARM_MAX)));
+            Direction.NORTH, Block.box(MIN, MIN, 0.0, MAX, MAX, MIN),
+            Direction.SOUTH, Block.box(MIN, MIN, MAX, MAX, MAX, 16.0),
+            Direction.WEST, Block.box(0.0, MIN, MIN, MIN, MAX, MAX),
+            Direction.EAST, Block.box(MAX, MIN, MIN, 16.0, MAX, MAX),
+            Direction.DOWN, Block.box(MIN, 0.0, MIN, MAX, MIN, MAX),
+            Direction.UP, Block.box(MIN, MAX, MIN, MAX, 16.0, MAX)));
 
     /** One cached shape per connection combination, so shapes are never rebuilt in game. */
     private final Map<BlockState, VoxelShape> shapeCache = new java.util.HashMap<>();
@@ -76,16 +80,26 @@ public class PipeBlock extends Block {
     public PipeBlock(Properties properties) {
         super(properties);
         registerDefaultState(defaultBlockState()
-                .setValue(NORTH, false)
-                .setValue(EAST, false)
-                .setValue(SOUTH, false)
-                .setValue(WEST, false)
-                .setValue(UP, false)
-                .setValue(DOWN, false));
+                .setValue(NORTH, PipeConnection.NONE)
+                .setValue(EAST, PipeConnection.NONE)
+                .setValue(SOUTH, PipeConnection.NONE)
+                .setValue(WEST, PipeConnection.NONE)
+                .setValue(UP, PipeConnection.NONE)
+                .setValue(DOWN, PipeConnection.NONE));
     }
 
-    public static BooleanProperty propertyFor(Direction direction) {
+    public static EnumProperty<PipeConnection> propertyFor(Direction direction) {
         return BY_DIRECTION.get(direction);
+    }
+
+    /**
+     * Whether this block is a router (Basic / Provider / Request / ...).
+     *
+     * <p>Plain transport pipes are not routers: they only form corridors between routed
+     * pipes and never own green/red exit marks or route tables.
+     */
+    public static boolean isSmartPipe(Block block) {
+        return block instanceof RoutedPipeBlock;
     }
 
     @Override
@@ -98,7 +112,8 @@ public class PipeBlock extends Block {
         BlockState state = defaultBlockState();
         for (Direction direction : Direction.values()) {
             state = state.setValue(propertyFor(direction),
-                    connectsTo(context.getLevel(), context.getClickedPos(), direction));
+                    connectionToward(context.getLevel(), context.getClickedPos(), direction,
+                            PipeConnection.INDIRECT));
         }
         return state;
     }
@@ -107,36 +122,48 @@ public class PipeBlock extends Block {
      * Recomputes the connection toward a neighbour that just changed.
      *
      * <p>Only the one side is touched. Rebuilding all six would be correct but pointless
-     * work on every neighbour update.
+     * work on every neighbour update. Pipe-facing sides keep their current mark when the
+     * neighbour is still a pipe, so a local update does not flash red before the network
+     * rebuild refreshes corridors.
      */
     @Override
     protected BlockState updateShape(BlockState state, LevelReader level,
                                      ScheduledTickAccess scheduledTicks, BlockPos pos,
                                      Direction direction, BlockPos neighbourPos,
                                      BlockState neighbourState, RandomSource random) {
-        return state.setValue(propertyFor(direction), connectsTo(level, pos, direction));
+        EnumProperty<PipeConnection> property = propertyFor(direction);
+        return state.setValue(property,
+                connectionToward(level, pos, direction, state.getValue(property)));
     }
 
     /**
-     * Whether the pipe should draw an arm toward {@code direction}.
+     * What this face should report for its neighbour.
      *
-     * <p>Pipes join other pipes, and they join anything exposing an item inventory, which
-     * is what makes a pipe visibly meet the chest it serves.
+     * <p>When the neighbour is a pipe, {@code existingPipeMark} is kept if it is already a
+     * pipe mark; otherwise the face becomes {@link PipeConnection#INDIRECT} until the
+     * network promotes direct corridors.
      */
-    protected boolean connectsTo(LevelReader level, BlockPos pos, Direction direction) {
+    public static PipeConnection connectionToward(LevelReader level, BlockPos pos,
+                                                  Direction direction,
+                                                  PipeConnection existingPipeMark) {
         BlockPos neighbour = pos.relative(direction);
         if (!level.hasChunkAt(neighbour)) {
-            return false;
+            return PipeConnection.NONE;
         }
         if (level.getBlockState(neighbour).getBlock() instanceof PipeBlock) {
-            return true;
+            return existingPipeMark.isPipe() ? existingPipeMark : PipeConnection.INDIRECT;
         }
         // Capability lookup needs a real Level; during placement previews it may not be one.
         if (level instanceof Level realLevel && !realLevel.isClientSide()) {
-            return realLevel.getCapability(
-                    Capabilities.Item.BLOCK, neighbour, direction.getOpposite()) != null;
+            if (realLevel.getCapability(
+                    Capabilities.Item.BLOCK, neighbour, direction.getOpposite()) != null) {
+                return PipeConnection.INVENTORY;
+            }
+            return PipeConnection.NONE;
         }
-        return level.getBlockState(neighbour).hasBlockEntity();
+        return level.getBlockState(neighbour).hasBlockEntity()
+                ? PipeConnection.INVENTORY
+                : PipeConnection.NONE;
     }
 
     @Override
@@ -163,11 +190,21 @@ public class PipeBlock extends Block {
     }
 
     private VoxelShape shapeFor(BlockState state) {
+        // DIRECT vs INDIRECT vs INVENTORY share the same arm geometry; collapse them so
+        // the cache is not tripled for identical shapes.
+        BlockState collapsed = state;
+        for (Direction direction : Direction.values()) {
+            EnumProperty<PipeConnection> property = propertyFor(direction);
+            if (collapsed.getValue(property).isConnected()) {
+                collapsed = collapsed.setValue(property, PipeConnection.INVENTORY);
+            }
+        }
+        final BlockState key = collapsed;
         synchronized (shapeCache) {
-            return shapeCache.computeIfAbsent(state, key -> {
-                VoxelShape shape = CORE;
+            return shapeCache.computeIfAbsent(key, ignored -> {
+                VoxelShape shape = CENTRE;
                 for (Direction direction : Direction.values()) {
-                    if (key.getValue(propertyFor(direction))) {
+                    if (key.getValue(propertyFor(direction)).isConnected()) {
                         shape = Shapes.or(shape, ARMS.get(direction));
                     }
                 }
@@ -191,6 +228,10 @@ public class PipeBlock extends Block {
                                                net.minecraft.server.level.ServerLevel level,
                                                BlockPos pos, boolean movedByPiston) {
         super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
+        // Cancel here rather than waiting for a tick to notice, so provider stock stops
+        // being held for a chain that can no longer complete.
+        PipeNetwork network = PipeNetwork.get(level);
+        network.craftJobs().cancelInvolving(level, network, pos);
         // The block is already gone from the world here, so the network reads the hole
         // and rebuilds from whatever pipes are still adjacent to it.
         PipeNetwork.get(level).invalidate(pos);

@@ -1,0 +1,7 @@
+{
+  "parent": "bobbypipes:block/passive_supplier_pipe_arm",
+  "textures": {
+    "side": "bobbypipes:block/passive_supplier_pipe_arm_direct",
+    "particle": "bobbypipes:block/passive_supplier_pipe"
+  }
+}

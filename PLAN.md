@@ -11,30 +11,97 @@ Request-driven item routing, built natively for **NeoForge 26.1**.
 | Provenance | No LogisticsPipes code, written from scratch |
 | License | LGPL-3.0-only |
 | Target | Minecraft 26.1.2 / NeoForge 26.1.2.13-beta / Java 25 |
+| Routing model | LP-shaped: routed pipes are routers; plain pipe is unrouted corridor fabric |
 
 Progress markers: `[ ]` todo, `[x]` done, `[~]` in progress
 
 ## Where things stand
 
-Phases 0 to 3 are complete. Phase 5 is half done and got there ahead of Phase 4, because
-item movement had to work before there was anything worth putting a screen on.
+Phases 0 to 3 complete. Phase 4 (GUI), 4B (rendering) and much of Phase 5 are done, and
+several Phase 6 items were pulled forward: crafting pipes, pattern tables, satellite pipes
+and JEI integration all exist.
 
-**Items move end to end today.** A request pulls from a chest behind a Provider pipe,
-routes across the network, and delivers into a chest behind a Request pipe. Driven by
-`/bobbypipes plan`, `/bobbypipes request` and `/bobbypipes parcels` until the GUI lands.
+**Working end to end:** request GUI, provider and request pipes, active and passive supplier
+pipes, parcels synced and drawn in transit, satellite naming, pattern import from JEI,
+provider pulse budgeting, default routes.
 
-Remaining work is mostly GUI-shaped: packets, a menu, screens, then Chassis and Item Sink.
+**Seven pipe types exist** and each has its own texture family, hue shifted by
+`tools/tint_pipes.py` so the green and red connection marks keep their exact colours:
+provider 22, request 158, passive supplier 195, basic 220, supplier 250, crafting 285,
+satellite 330.
+
+**Nothing costs power yet, nothing moves fluid, and there is no chassis.** Those three are
+the bulk of what is left and each is broken out under Phase 6 below.
+
+**Unverified, and the current focus:** multi-step crafting chains. Every structural defect
+in the diagnosis below has been fixed in code, but nobody has run a chain in a real world
+since, and the executor still has no automated coverage. Treat it as untested, not as
+working. See "Crafting chains" below.
 
 > **On phase order.** The numbering is the original plan, kept so commit messages still
-> line up. Execution has interleaved 4 and 5 rather than running them in order. Work is
-> pulled forward when it unblocks something and pushed back when doing it early would mean
-> guessing; each deferral says which is which.
+> line up. Execution has interleaved 4, 4B, 5 and 6 rather than running them in order.
+
+---
+
+## Crafting chains - diagnosed and rewritten, not yet re-tested
+
+> **Status.** This section was written when chains were observed failing in game. Every row
+> of the table below has since been addressed, and the code no longer does the thing each
+> row describes: `CraftJobManager` no longer calls `supplyFor` at all, promises are bound at
+> plan time, and the planner runs provider, then surplus, then crafting. What has *not*
+> happened is a run in a real world to confirm it, and the executor still has no test of its
+> own. So the honest state is unverified rather than either broken or fixed. The diagnosis
+> is kept because it is the record of what was wrong and why the current shape is the way it
+> is.
+
+101 unit tests passed while the feature failed in game. The reason was structural:
+`CraftChainSimulator` is described in its own javadoc as a "Minecraft-free stand-in for
+CraftJobManager". It is a **parallel reimplementation** of the orchestration that shares
+only the small pure helpers in `CraftJobPolicy`. Its five chain tests prove the simulator
+is self-consistent; they say nothing about `CraftJobManager`, so any divergence between
+the two is invisible.
+
+Diagnosis against how LogisticsPipes actually does it (read from
+`~/Development/Logistic-Pipes-2`, branch 1.20.1, `logisticspipes/request/RequestTreeNode`):
+
+| LP behaviour | BobbyPipes as diagnosed | Consequence at the time |
+|---|---|---|
+| Resolve the whole tree, then `fullFill()`. Nothing moves until the root is satisfied. | Plan, then `CraftJobManager` re-derives pulls at run time via `supplyFor(dest).available(item)`. | The plan's decisions are discarded; execution races against a changed world. |
+| Promises are bound to a specific provider and amount. | Craft-input withdrawals are skipped at commit, then re-looked-up later. | Intermediates do not exist in any inventory yet, so `available()` reports nothing and downstream jobs stall. |
+| `checkExtras` credits surplus from one node to another in the same tree. | No extras concept. Surplus is routed to a default route or dropped. | A recipe yielding 4 when 2 are needed wastes the rest instead of feeding a sibling. |
+| `getSubRequests` backs off to `workSetsAvailable` when inputs fall short. | All-or-nothing per craft step. | Partial feasibility is lost. |
+| Order is `checkProvider` then `checkExtras` then `checkCrafting`, per node. | Planner drains stock then recurses, with no extras pass. | Same items get planned twice across branches. |
+
+### Fix plan
+
+- [x] Delete `CraftChainSimulator` and its five tests. They asserted the simulator was
+      self-consistent and could never fail on a real bug.
+- [x] Bind promises at plan time. `RequestPlan.Sourced` carries an `Origin` of either
+      `Stock(provider)` or `Craft(crafter)`; `CraftJobManager` pulls from the bound
+      provider instead of re-querying supply.
+- [x] Model intermediates as promised future output. An input met by an upstream craft is
+      bound to that crafter, and the executor waits instead of hunting for an item that
+      does not exist yet.
+- [x] Stock feeding a craft is no longer also a withdrawal, which removes the item-name
+      filter in `RequestService.commit` that skipped legitimate direct pulls whenever the
+      same item appeared anywhere in a recipe.
+- [x] A job blocked on upstream work no longer counts down its timeout, so a long chain
+      cannot expire waiting for work that has not started.
+- [ ] Re-point chain coverage at the real `CraftJobManager` behind a thin world
+      abstraction. Planning is now covered by `PlanBindingTest`; execution still is not.
+- [x] Surplus credit across the tree, LP's `extrapromises`. A craft that overproduces
+      banks the remainder against its crafter; a later demand spends that before starting
+      a second craft, and the binding names the producer so it is delivered rather than
+      routed away as excess. Byproducts (a recipe's secondary outputs) are still to do and
+      need `Supply.Craft` to carry more than one output.
+- [x] Back off to a feasible run count: `craftUpTo` binary searches the largest workable
+      run count rather than failing the step outright.
+- [ ] Gate a job on its upstream dependencies rather than only on per-crafter ordering, so
+      long chains cannot time out waiting on work that has not started
 
 ---
 
 ## Phase 0 - Foundation
-
-Get the repo legally and structurally correct while it is small enough to change cheaply.
 
 - [x] Archive the old playground to `../bobbypipes-playground` (git history intact)
 - [x] Create fresh repo directory at `~/Development/bobbypipes`
@@ -50,7 +117,7 @@ Get the repo legally and structurally correct while it is small enough to change
 
 **Phase 0 complete.**
 
-**Portability rules adopted** (learned from the reference project's failure modes):
+**Portability rules adopted:**
 - No absolute paths in `gradle.properties` - JDK comes from the Gradle toolchain + foojay resolver
 - `gradlew` committed with mode `100755`
 - Build must succeed on a machine that is not the author's
@@ -58,8 +125,6 @@ Get the repo legally and structurally correct while it is small enough to change
 ---
 
 ## Phase 1 - Empty mod loads on 26.1
-
-Prove the stack before any game logic exists.
 
 - [x] `./gradlew build` succeeds from a clean checkout
 - [x] One block, one item, one creative tab registered
@@ -71,73 +136,62 @@ Prove the stack before any game logic exists.
 
 **Phase 1 complete.**
 
-Still placeholder: `wrench` has no behaviour, and it gets its job with the Chassis. Pipe
-models are no longer placeholder; see Phase 4B.
+Still placeholder: `wrench` has no behaviour (lands with Chassis). Pipe models are no
+longer placeholder; see Phase 4B.
 
 ---
 
 ## Phase 2 - Routing engine
 
-The core value. Loader-agnostic logic, least affected by 26.1's API changes.
+Loader-agnostic core, least affected by 26.1's API changes.
 
-- [x] Network discovery - pipe adjacency graph, incremental rebuild on place/break
-- [x] Router model - each routed pipe is a node with a stable identity across reloads
-- [x] Path computation - Dijkstra, computed once per topology change, **never per tick**
+- [x] Network discovery - pipe adjacency lattice, incremental rebuild on place/break
+- [x] **LP router model** - only routed pipes (`RoutedPipeBlock`: Basic, Provider, Request)
+      are routing nodes. Plain `PipeBlock` is unrouted corridor fabric.
+- [x] **Direct corridors** - unbranched degree-2 runs of plain pipe between routers become
+      transit edges (`DirectCorridors`). A plain T-junction breaks the corridor; place a
+      Basic pipe on the junction to reconnect (same build rule as classic LP).
+- [x] Path computation - Dijkstra on the transit topology, once per topology change,
+      **never per tick**
 - [x] Atomic route-table swap so in-flight items survive a rebuild
 - [x] Item-in-transit model - items exist as network state, not entities
 - [x] Request tree - recursive resolution of a request into providers + crafting steps
 - [x] Order manager - outstanding promises, timeouts, failure/rollback
-- [x] Coverage for delivery, provider selection, request failure and topology change
-      mid-flight: unit tests rather than gametests (see note below)
+- [x] Coverage for delivery, provider selection, request failure, topology change
+      mid-flight, and corridor/junction behaviour: unit tests rather than gametests
 
 **Phase 2 complete, engine and world wiring both.**
 
-The engine carries no Minecraft types at all, which is why plain JUnit covers it instead
-of gametests: no game runtime, and the suite runs in about a second. `Topology`,
-`RouteSolver`, `RoutingSnapshot`, `RoutingCache`, `ParcelTracker`, `RequestPlanner` and
-`DeliveryLedger` are all generic over node and item identity.
-
-World side: `PipeBlock` invalidates on place and break, `PipeNetwork` reads pipes out of a
-level and owns that level's ledger and parcel tracker, `NetworkEvents` drives it off the
-level tick, `NetworkSupply` reads real inventories through the 26.1 capability API using
-`ItemResource` as item identity, and `InventoryAccess` handles extraction and insertion.
+The engine carries no Minecraft types at all (`Topology`, `RouteSolver`,
+`RoutingSnapshot`, `RoutingCache`, `ParcelTracker`, `RequestPlanner`, `DeliveryLedger`,
+`DirectCorridors`). World side: `PipeNetwork` scans the lattice, publishes the transit
+topology, paints routed-exit marks on routers only, and owns ledger + parcels per level.
 
 **Verified in a real world** over RCON (`tools/rcon.py`), not only in unit tests:
 
 | Check | Result |
 |---|---|
-| Straight line of 5 pipes | 4 hops, first step correct |
-| Break a pipe mid-line | destination goes unreachable, restoring fixes it |
-| Detour around a gap | reroutes 6 hops up and over |
+| Straight line of pipes between routers | routes; green exits on routers |
+| Plain T-junction between routers | corridor breaks; destination unreachable until Basic is placed |
 | Request 5 iron, near chest has 7 and far chest has 40 | takes all 5 from the near chest |
-| Request 45 | 7 from near, then 38 from far |
-| Request 100 against 47 available | takes 47, reports short by 53 |
-| Request an item nothing holds | nothing found, short by the full amount |
+| Request against shortfall | takes what exists, reports the short |
+| Provider is opt-in | plain pipe past a chest does not expose it |
 
-> Design note: this is the subsystem where a naive implementation would most closely
-> mirror LP1's structure. Written from observed behaviour, not from reading their source,
-> and with its own vocabulary throughout.
+> Design note: written from observed LP behaviour, not from reading LP source, with its
+> own vocabulary. Unrouted junctions disconnect the router graph rather than randomly
+> bouncing parcels (parcels only travel discovered corridors). Same player build rule.
 
 ---
 
 ## Phase 3 - Modern-native redesign passes
 
-Where the "reimagining" actually lands, replacing 1.12-era patterns with modern ones.
-
 - [x] **Module config -> data components.** `ModDataComponents.ITEM_FILTER` carries module
-      configuration on the item, not in block entity NBT. Config travels with the module
-      when it is pulled out of a chassis, survives being carried, and syncs for free.
-- [x] **Filtering -> tags + component predicates.** `ItemFilterEntry` matches by item or by
-      item tag, so a filter saying "any plank" keeps working when a mod adds a wood type.
-      The mode and empty-list semantics live in `FilterList`, which is generic and unit
-      tested; only stack comparison touches Minecraft.
+      configuration on the item, not in block entity NBT.
+- [x] **Filtering -> tags + component predicates.** `ItemFilterEntry` / `FilterList`.
 
 **Phase 3 complete.**
 
-Two further redesign passes were originally listed here and have moved to the phase that
-can actually do them: **networking** to Phase 4, **datapack-driven types** and **pure FE
-power** to Phase 6. Neither was skipped; both were waiting on something that would tell
-them what shape to take, and that thing lives in the later phase.
+Networking moved to Phase 4; datapack-driven types and pure FE power moved to Phase 6.
 
 ---
 
@@ -146,131 +200,173 @@ them what shape to take, and that thing lives in the later phase.
 Written **once**, natively in 26.1's render-state model
 (`Screen#extractRenderState`, `GuiGraphicsExtractor`).
 
-This phase is why the whole plan is sequenced this way: writing GUIs on 1.21.1 first
-would mean writing every one of them twice.
-
-- [ ] **Networking - `CustomPacketPayload` + `StreamCodec`.** Records throughout.
-      *Moved here from Phase 3.* Packet shapes follow from what the screens actually need
-      to send and show, so designing them first would have meant guessing twice. This is
-      the prerequisite for everything below it.
-- [ ] Menu and container plumbing for the screens
-- [ ] Shared widget/layout toolkit (the piece LP1 reinvented per-screen)
-- [ ] Request screen - search, quantity, crafting preview, missing-items report
-- [ ] Chassis screen - module slots + per-module config
+- [x] **Networking - `CustomPacketPayload` + `StreamCodec`.** Parcel sync plus request
+      stock / submit / result screen packets.
+- [x] Menu and container plumbing for the Request screen
+- [ ] Shared widget/layout toolkit
+- [~] Request screen - search, quantity, submit, shortfall status (MVP). Crafting preview
+      and richer missing-items report still to come.
+- [ ] Chassis screen - module slots + per-module config (see Phase 8)
 - [ ] Provider / Item Sink filter screens
-- [ ] Crafter screen (needs the Crafter pipe from Phase 6)
-
-Pipe rendering is its own phase, below. It shares the render-state migration but is
-otherwise independent of the screens and can run in either order.
+- [x] Crafter / pattern table / satellite screens (ghost slots, import, JEI transfer)
+- [x] Supplier screen, shared by the active and passive supplier. One menu, one screen, and
+      a `passive` flag choosing the backdrop.
+- [x] **Panel styling pass.** Vanilla hardcodes container labels to a dark grey picked for
+      stone-coloured backgrounds, which reads as a smudge on this mod's saturated panels.
+      Screens draw their own labels instead of calling `super.extractLabels`, and
+      `PanelStyle` holds the palette: white labels, grey hints, and the pipe's own green and
+      red taken pixel for pixel from the arm textures so a screen saying "routed" uses the
+      same colour the pipe does.
+- [x] Empty-state text is centred and scrimmed rather than laid over painted slot art, and
+      a search that matched nothing no longer claims the network is empty.
 
 ---
 
 ## Phase 4B - Pipe rendering
 
-Pipes currently draw as a fixed 6x6x6 core with a flat texture. That is a deliberate
-stopgap, not a design: a thin core is see-past where a full cube was not, and the
-collision and highlight boxes follow it so what you can hit matches what you can see.
-Everything below replaces it.
+### Settled decisions
 
-### What 26.1 changed, and why this needs planning
+- [x] **Baked model for the pipe body**, BER later for parcels only.
+- [x] Uniform-width tube (no wider junction core). Caps on open faces; arms on connected faces.
+- [x] Connection state - per-face `PipeConnection` enum (`none` / `inventory` / `direct` /
+      `indirect`), recomputed one side at a time on neighbour change
+- [x] Multipart blockstate: cap / arm per face from connection state
+- [x] Voxel shape composed from the same connection state, cached per collapsed state
+- [x] Pipes connect to inventories (capability) as well as to other pipes
+- [x] **LP routed-exit marks** - green/red stripes on **routed pipes only**, selected by
+      `direct` / `indirect` arm models (stripe baked into the arm texture, not a separate
+      overlay). Plain transport pipe has no marks.
+- [x] Aspect-correct arm UVs (face UV window matches the 7x4.5 arm stub, not a squashed 16x16)
 
-The render layer moved to be **per-quad**, set at bake time
-(`MutableQuad.chunkLayer()` / `setSprite(sprite, ChunkSectionLayer, RenderType)`). It is no
-longer a `render_type` key in the model JSON and no longer a block-level registration, both
-of which is how every pre-26.1 tutorial does it. Anything wanting a translucent or cutout
-pipe body has to go through the baked-model pipeline, so this is not a one-line change and
-should not be attempted as one.
+### Still open
 
-Open question to settle first: **baked model or block entity renderer.** A baked model is
-far cheaper because it batches into the chunk mesh, but it cannot animate. Parcels moving
-need per-frame positions, so the likely answer is a baked model for the pipe body and a BER
-only for parcels. Worth confirming before building either.
-
-### Work
-
-- [x] Decide baked model vs BER per element. **Decided: baked for the pipe body.** It
-      batches into the chunk mesh and the body never animates, so a BER would cost per-frame
-      work for nothing. Parcels do animate and stay BER, below.
-- [x] Connection state - six boolean blockstate properties, recomputed on neighbour change
-      one side at a time rather than all six
-- [x] Multipart blockstate: core plus one arm model per connected side
-- [x] Voxel shape composed from the same connection state, so collision follows the model
-      instead of the two drifting apart. Cached per state; the constants are shared with
-      the model and commented as needing to move together.
-- [x] Pipes connect to inventories, not just to each other, so a pipe visibly meets the
-      chest it serves
-- [x] Arms narrower than the core, so a junction reads as a node rather than a uniform tube
-- [ ] Translucent or glass-style body through the per-quad chunk layer, so contents are
-      visible from outside
-- [ ] Distinguish pipe types by more than colour. Provider is green and Request blue today,
-      which fails for colourblind players and in low light. Shape or an emblem on the core
-      would carry it without relying on hue.
-- [ ] Parcels rendered in transit. `Parcel` already exposes `atNode`, `nextHop` and
-      `progress(ticksPerHop)`, which is exactly what an interpolated position needs.
-- [ ] Sync parcels to the client. They are server-side network state today, so the client
-      cannot see them at all; this depends on the Phase 4 networking item.
+- [ ] Translucent or glass-style body through the per-quad chunk layer
+- [ ] Distinguish pipe types by more than colour (emblem / shape for colourblind + low light)
+- [x] Rudimentary parcel debug render - sync snapshots each tick, draw items along
+      `atNode`->`nextHop` via extract/submit (not the final BER)
+- [ ] Full parcel renderer (proper BER / host, animation polish)
+- [x] Sync parcels to the client (debug-quality full replace; Phase 4 may refine)
 - [ ] Connected-texture or seam handling where pipes meet blocks
-- [ ] Performance pass: a large network must not rebuild chunk meshes every tick. Verify
-      with a few hundred pipes and parcels flowing.
+- [ ] Performance pass on large networks (chunk rebuilds, flowing parcels)
 
 ### Deliberately out of scope here
 
-Item models in the world, held-item rendering and the guidebook. Those are cosmetic and
-none of them block a playable mod.
+Item models in the world, held-item rendering and the guidebook.
 
 ---
 
 ## Phase 5 - MVP vertical slice
 
-Do **not** build all pipe types before anything is playable.
-
-Minimum shippable loop:
-
-- [x] Basic transport pipe
+- [x] Unrouted transport pipe (`PipeBlock`)
+- [x] Basic routed pipe (`BasicPipeBlock`) - junction / routing glue, no inventory role
 - [x] Provider pipe (exposes an inventory to the network)
 - [x] Request pipe, driving the full pull-extract-route-deliver loop
-- [ ] Request GUI - see Phase 4, which is what remains before this is playable without commands
+- [x] Request GUI MVP - right-click Request pipe to browse stock and submit (see Phase 4)
+- [x] Supplier pipe (active) - nine ghost stock targets, requests its own shortfall once a
+      second, cancels an unstarted craft when providers can cover the slot instead
+- [x] Passive supplier pipe - the same targets as a sink rather than a requester, see Phase 6
 - [ ] Chassis pipe with one module slot
 - [ ] Item Sink module (routes matching items to an inventory, using the Phase 3 filter)
+- [x] Default route  -  Basic pipe GUI checkbox; space-aware excess sink
+- [x] `SinkFinder` - one answer to "where does an item with no destination go", used by
+      drift, hopper intake and craft surplus alike. Passive suppliers outrank default
+      routes, cheapest route wins within a tier, and a sink takes only what it is short by
 
-**Items move end to end.** Verified in a real world over RCON: a request pulled 10 iron
-out of a chest behind a Provider pipe, routed it four hops, and dropped it into the chest
-behind the Request pipe. Source went 40 to 30, destination 0 to 10, promise settled,
-parcel retired.
+**Items move end to end** between routers across corridors. Demonstrable without commands
+via the Request screen; debug commands remain for plan inspection and parcel dumps.
 
-Safety behaviour verified too:
-- Being a provider is opt-in. Swapping the Provider pipe for a plain one makes the same
-  chest invisible to the network, so a pipe routed past storage does not drain it.
-- Breaking the network mid-flight strands the parcel and puts the items back into an
-  inventory beside the pipe it gave up on. Source plus destination still totalled the
-  original 40, so nothing was lost or duplicated.
+Safety behaviour in place:
+- Provider is opt-in (plain pipe past storage does not drain it)
+- Breaking the network mid-flight strands the parcel and returns items beside that pipe
 
-Driven for now by `/bobbypipes plan` (dry run), `/bobbypipes request` (actually ships) and
-`/bobbypipes parcels` (what is in flight), until the GUI replaces them.
-
-Once the Request screen exists the mod is demonstrable. Everything below is breadth, added
-only after the slice works end to end.
+Everything below is breadth.
 
 ---
 
 ## Phase 6 - Breadth
 
-- [ ] Crafter pipes + multi-step crafting chains. The planner already resolves recipes
-      recursively; `NetworkSupply.recipesFor` returns nothing only because no block on the
-      network claims it can craft.
-- [ ] Satellite / firewall / quicksort pipes
-- [ ] Higher chassis tiers, remaining modules
-- [ ] **Pipe and module types -> datapack-driven.** *Moved here from Phase 3.* Defining a
-      JSON-driven registry over the three pipe types that exist today would be abstracting
-      over a shape not yet visible. This phase is where enough types exist for the shared
-      structure to be real rather than guessed.
-- [ ] Fluid routing
-- [ ] **Power -> pure FE.** *Moved here from Phase 3.* `IEnergyStorage` only, no bespoke
-      energy unit. Deliberately not built earlier: nothing in the MVP slice draws power, so
-      it would have been an energy system with no consumer, which is dead code that still
-      has to be maintained. It lands with the pipe types that actually cost energy to run.
+- [~] Crafter pipes + multi-step crafting chains - BROKEN, see top of file  -  pattern table, crafting pipe,
+      `CraftJobManager`, `NetworkSupply.recipesFor` publishes live patterns
+- [~] Satellite pipes (unique names, one satellite / slots 6-8, deliver-and-wait) - blocked on the chain fix.
+      Pattern Table is LP LCT-style (ghost matrix, resource buffer, real craft).
+      Firewall / quicksort still open
+- [x] Passive supplier pipe - same ghost targets as the Supplier, but a sink rather than a
+      requester. `SinkFinder` now answers "where does an item with no destination go", and
+      ranks a passive supplier that is still short above a default route, matching how LP
+      orders its sinks. Every destination-less item already funnelled through one call, so
+      drift, hopper intake and craft surplus all pick it up at once.
+- [ ] **Pipe and module types -> datapack-driven**
 - [ ] Security / permissions
-- [ ] Integrations (JEI first) - deliberately last; nothing depends on them
+- [~] Integrations  -  optional JEI recipe transfer into pattern ghosts; fuller JEI later
+
+The three big ones below are the bulk of what is left. Each is a phase in its own right.
+
+---
+
+## Phase 7 - Power
+
+Nothing in the mod costs energy today, so a network is free to run and there is no reason
+to build a power infrastructure next to it. LP's power system is what makes a large network
+a build rather than a formality.
+
+**Pure FE.** `IEnergyStorage` only, no bespoke energy unit and no conversion ratio to
+explain. Machines from every other mod can feed it directly.
+
+- [ ] **Power block** - accepts FE from any cable, buffers it, and is the network's supply.
+      Sized so one block serves a modest network and a large one needs several.
+- [ ] Power reaches pipes over the routed graph, not over adjacency. A pipe draws from the
+      cheapest reachable power block, the same ordering the request planner already uses,
+      so `RouteTable.destinationsByCost` does the work again.
+- [ ] **Per-pipe draw.** Cost is per action, not per tick, so an idle network is free:
+      - provider extract and request delivery charge per parcel dispatched
+      - crafting pipes charge per craft started
+      - supplier and passive supplier charge per restock parcel
+      - basic and plain pipe are free; they are fabric, not actors
+- [ ] Brownout behaviour. Out of power is a stall, never a loss: a pipe that cannot pay
+      does not act this tick and retries, and no parcel or promise is dropped for it.
+- [ ] Power GUI on the block: buffer level, draw rate, and which pipes are drawing.
+- [ ] Unit coverage on the pure part (draw accounting, cheapest-supplier selection,
+      brownout ordering) with no Minecraft types, the way the routing core is covered.
+
+Open question: whether power is per level or per network. Per network is the LP feel;
+per level is far simpler and cannot be gamed by splitting a network in two.
+
+---
+
+## Phase 8 - Chassis pipes
+
+The chassis is what turns a fixed set of pipe types into a system. A chassis is a routed
+pipe with module slots; the modules supply the behaviour that is currently welded into each
+pipe class.
+
+- [ ] Chassis pipe Mk1, one module slot, using the Phase 3 `ITEM_FILTER` data component so
+      module config already travels on the item
+- [ ] Module as an item + a behaviour interface, resolved server side per slot
+- [ ] Item Sink module (Phase 5 carry-over) - the filter-driven counterpart to the passive
+      supplier's explicit targets
+- [ ] Provider, Active Supplier, Passive Supplier and Terminus modules. These should be the
+      existing pipe logic lifted into modules rather than reimplemented; the standalone
+      pipes stay as the convenient preset.
+- [ ] Chassis screen - module slots plus the selected module's own config panel (Phase 4)
+- [ ] Mk2 to Mk5: more slots, and the power cost per tier if Phase 7 has landed
+- [ ] Wrench finally does something beyond opening screens (module insert / extract)
+
+Ordering note: this wants `SinkFinder` to consult modules, not just passive suppliers. The
+priority tiers it already has are the place that plugs into.
+
+---
+
+## Phase 9 - Fluid pipes
+
+- [ ] Fluid transport pipe, the plain-pipe equivalent for `FluidResource`
+- [ ] Fluid provider and request pipes, reusing the routing graph rather than a second one.
+      The topology is about pipes, not about what flows through them.
+- [ ] Fluid supplier (LP's `ModuleFluidSupplier`) once Phase 8 exists
+- [ ] Decide the transit model: fluid as discrete parcels reuses `ParcelTracker` whole,
+      which is the cheap answer, but does not look like flow. A continuous model looks
+      right and needs its own tracker.
+- [ ] Tank interop through NeoForge's fluid capability, both directions
+- [ ] Request screen shows fluids alongside items, with buckets as the unit
 
 ---
 
@@ -279,6 +375,7 @@ only after the slice works end to end.
 | Risk | Mitigation |
 |---|---|
 | 26.1 API churn (NeoForge still `-beta`) | Exact version pins; upgrade deliberately, not automatically |
-| Scope - LP is one of the largest mods ever written | Phase 5 slice before any Phase 6 breadth. Half done. |
-| GUI work cannot be verified the way item movement was | Screens need eyeballing; logic behind them stays in testable non-Minecraft classes where possible |
+| Scope - LP is one of the largest mods ever written | Phase 5 slice before any Phase 6 breadth |
+| Seven pipe hues and only so much room between the green and red marks | `tools/tint_pipes.py` windows the shift by hue so marks survive; past about eight families, shape or emblem has to carry the difference (Phase 4B) |
+| GUI work cannot be verified the way item movement was | Screens need eyeballing; logic stays in testable non-Minecraft classes where possible |
 | Ecosystem not yet on 26.1 | Costs nothing - no integrations planned until Phase 6 |

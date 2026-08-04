@@ -1,0 +1,60 @@
+package com.bobby.bobbypipes.network;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class ProviderPulseBudgetTest {
+
+    @Test
+    @DisplayName("a fresh provider gets a full pulse immediately")
+    void fullPulseOnFirstAsk() {
+        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+
+        assertEquals(8, budget.budget("a", 100));
+    }
+
+    @Test
+    @DisplayName("consume drains the current pulse; no refill until the interval elapses")
+    void drainsUntilInterval() {
+        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+
+        assertEquals(8, budget.budget("a", 0));
+        budget.consume("a", 8);
+        assertEquals(0, budget.budget("a", 0));
+        assertEquals(0, budget.budget("a", 4));
+        assertEquals(8, budget.budget("a", 5));
+    }
+
+    @Test
+    @DisplayName("partial consume leaves the rest of the pulse available")
+    void partialConsume() {
+        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+
+        budget.budget("a", 0);
+        budget.consume("a", 3);
+
+        assertEquals(5, budget.budget("a", 0));
+    }
+
+    @Test
+    @DisplayName("each provider has its own pulse window")
+    void independentSources() {
+        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+
+        budget.budget("a", 0);
+        budget.consume("a", 8);
+
+        assertEquals(0, budget.budget("a", 0));
+        assertEquals(8, budget.budget("b", 0));
+    }
+
+    @Test
+    @DisplayName("invalid construction is rejected")
+    void rejectsNonPositive() {
+        assertThrows(IllegalArgumentException.class, () -> new ProviderPulseBudget<>(0, 5));
+        assertThrows(IllegalArgumentException.class, () -> new ProviderPulseBudget<>(8, 0));
+    }
+}

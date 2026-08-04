@@ -17,12 +17,21 @@ public final class ModCreativeTabs {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN = TABS.register("main",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup." + BobbyPipes.MOD_ID))
-                    .withTabsBefore(CreativeModeTabs.REDSTONE_BLOCKS)
+                    // Last of the vanilla tabs, so the mod's own tab lands at the end of
+                    // the row rather than shouldering in between two vanilla ones.
+                    .withTabsBefore(CreativeModeTabs.SPAWN_EGGS)
                     .icon(() -> ModItems.WRENCH.get().getDefaultInstance())
                     .displayItems((params, output) -> {
                         output.accept(ModBlocks.PIPE.get());
+                        output.accept(ModBlocks.BASIC_PIPE.get());
                         output.accept(ModBlocks.PROVIDER_PIPE.get());
                         output.accept(ModBlocks.REQUEST_PIPE.get());
+                        output.accept(ModBlocks.SUPPLIER_PIPE.get());
+                        output.accept(ModBlocks.PASSIVE_SUPPLIER_PIPE.get());
+                        output.accept(ModBlocks.CRAFTING_PIPE.get());
+                        output.accept(ModBlocks.SATELLITE_PIPE.get());
+                        output.accept(ModBlocks.PATTERN_TABLE.get());
+                        output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
                         output.accept(ModItems.WRENCH.get());
                     })
                     .build());

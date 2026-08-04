@@ -7,3 +7,10 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
+
+// Sibling mod, loaded into the dev run so pipes can be tested against real chests.
+// Composite build: its jar is rebuilt automatically before a bobbypipes run, so there is
+// no stale-jar trap. Runtime only, nothing here compiles against it.
+if (file('../bobbychests/settings.gradle').exists()) {
+    includeBuild '../bobbychests'
+}

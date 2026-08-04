@@ -29,10 +29,24 @@ sourceSets.main.resources {
 repositories {
     // Needed for JUnit. Minecraft and NeoForge come from the moddev plugin's own repos.
     mavenCentral()
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+    }
 }
 
 base {
     archivesName = mod_id
+}
+
+// Give the test source set everything main has, Minecraft and NeoForge included.
+// Without this, tests cannot even name an ItemResource, which is why the crafting
+// chain was previously covered by a hand written stand in rather than the real code.
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
 }
 
 // Mojang ships Java 25 to end users in 26.1.2, so mods should target Java 25.
@@ -105,6 +119,14 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    // Runs JUnit inside an FML environment. Patched Minecraft classes consult FML during
+    // static init, so without this a test cannot even touch SharedConstants. Declared
+    // after mods{} because it references the mod defined there.
+    unitTest {
+        enable()
+        testedMod = mods.getByName(mod_id)
+    }
 }
 
 // Sets up a dependency configuration called 'localRuntime'.
@@ -122,12 +144,15 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // Example optional mod dependency with JEI
-    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
-    // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
-    // compileOnly "mezz.jei:jei-${mc_version}-neoforge-api:${jei_version}"
-    // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
-    // localRuntime "mezz.jei:jei-${mc_version}-neoforge:${jei_version}"
+    // Optional JEI: API at compile time, full jar for runClient/local testing only.
+    compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
+    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+
+    // Sibling mod for testing pipes against real containers. localRuntime, not
+    // implementation, so no bobbypipes code can accidentally depend on it and the mod
+    // stays optional. Gradle substitutes this for the ../bobbychests build output.
+    localRuntime 'com.bobby.bobbychests:bobbychests:1.0.0'
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
@@ -198,5 +223,80 @@ idea {
     module {
         downloadSources = true
         downloadJavadoc = true
+    }
+}
+
+// --- Multiplayer handoff zip -------------------------------------------------
+// Builds build/dist/bobbypipes-<version>-mp.zip with the mod jar (+ optional
+// sibling bobbychests if already built) and a short install note. Wired to run
+// before runClient / runServer so a fresh zip is ready to copy every launch.
+
+def mpInstallNote = layout.buildDirectory.file('tmp/mp-install/INSTALL.txt')
+def mpNoteText = """\
+BobbyPipes multiplayer test pack
+================================
+
+Minecraft:  ${minecraft_version}
+NeoForge:   ${neo_version}
+Mod:        ${mod_id}-${mod_version}
+
+On each machine (and the dedicated server, if any):
+  1. Install NeoForge ${neo_version} for Minecraft ${minecraft_version}
+  2. Copy everything from the mods/ folder into .minecraft/mods/
+  3. Use the same mod set on client and server
+
+JEI is included so the pattern-table "+" can paste ghost recipes.
+Keep the pattern table open, look up a crafting recipe in JEI, click "+".
+""".stripIndent()
+
+tasks.register('writeMpInstallNote') {
+    group = 'distribution'
+    description = 'Writes INSTALL.txt for the multiplayer handoff zip.'
+    outputs.file(mpInstallNote)
+    def text = mpNoteText
+    doLast {
+        def note = mpInstallNote.get().asFile
+        note.parentFile.mkdirs()
+        note.text = text + "\nBuilt: ${new Date()}\n"
+    }
+}
+
+tasks.register('packageModZip', Zip) {
+    group = 'distribution'
+    description = 'Zips the mod jar for copying to another computer (multiplayer testing).'
+    dependsOn tasks.named('jar'), tasks.named('writeMpInstallNote')
+
+    archiveFileName = "${mod_id}-${mod_version}-mp.zip"
+    destinationDirectory = layout.buildDirectory.dir('dist')
+
+    from(tasks.named('jar', Jar).flatMap { it.archiveFile }) {
+        into 'mods'
+    }
+
+    // Sibling chests mod when a local build is already present (same localRuntime as runClient).
+    from(fileTree(dir: "${rootDir}/../bobbychests/build/libs",
+            includes: ['*.jar'],
+            excludes: ['*-sources.jar', '*-javadoc.jar', '*-slim.jar'])) {
+        into 'mods'
+    }
+
+    // Full JEI runtime jar (not the -api jars) so MP clients/servers get recipe transfer.
+    from(configurations.localRuntime) {
+        into 'mods'
+        include "jei-${minecraft_version}-neoforge-*.jar"
+        exclude '*-api-*.jar', '*-sources.jar'
+    }
+
+    from(mpInstallNote)
+
+    doLast {
+        logger.lifecycle("Multiplayer pack: ${archiveFile.get().asFile}")
+    }
+}
+
+// Fresh zip before launching so you can copy it while the game is running.
+['runClient', 'runServer'].each { runName ->
+    tasks.named(runName).configure {
+        dependsOn tasks.named('packageModZip')
     }
 }

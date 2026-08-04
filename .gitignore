@@ -38,3 +38,11 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+# Stray decompiled vanilla sources must never be tracked
+/net/
+
+### Runtime and tooling artifacts ###
+logs/
+__pycache__/
+*.pyc

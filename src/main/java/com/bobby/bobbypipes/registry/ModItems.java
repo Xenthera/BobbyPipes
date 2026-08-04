@@ -10,9 +10,26 @@ public final class ModItems {
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(BobbyPipes.MOD_ID);
 
-    /** Configuration tool. Rotates and reconfigures pipes once there is something to configure. */
+    /**
+     * Opens the configuration screen of any routed pipe.
+     *
+     * <p>Pipes sit against chests and machines, so a bare right click is far more often an
+     * attempt to open the container behind them. Gating the screens behind a tool keeps
+     * that from being hijacked.
+     */
     public static final DeferredItem<Item> WRENCH = ITEMS.registerItem("wrench",
-            props -> new Item(props.stacksTo(1)));
+            props -> new Item(props.stacksTo(1)) {
+                @Override
+                public void appendHoverText(net.minecraft.world.item.ItemStack stack,
+                                            Item.TooltipContext context,
+                                            net.minecraft.world.item.component.TooltipDisplay display,
+                                            java.util.function.Consumer<net.minecraft.network.chat.Component> lines,
+                                            net.minecraft.world.item.TooltipFlag flag) {
+                    lines.accept(net.minecraft.network.chat.Component
+                            .translatable("item.bobbypipes.wrench.tip")
+                            .withStyle(net.minecraft.ChatFormatting.GRAY));
+                }
+            });
 
     private ModItems() {
     }

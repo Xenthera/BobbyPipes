@@ -1,19 +1,61 @@
 {
   "parent": "block/block",
+  "ambientocclusion": false,
   "textures": {
-    "all": "bobbypipes:block/provider_pipe",
+    "side": "bobbypipes:block/provider_pipe_arm",
     "particle": "bobbypipes:block/provider_pipe"
   },
   "elements": [
     {
-      "from": [6, 6, 0],
-      "to": [10, 10, 6],
+      "from": [
+        4.5,
+        4.5,
+        0
+      ],
+      "to": [
+        11.5,
+        11.5,
+        4.5
+      ],
       "faces": {
-        "north": {"texture": "#all", "uv": [0, 0, 4, 4], "cullface": "north"},
-        "east":  {"texture": "#all", "uv": [0, 0, 6, 4]},
-        "west":  {"texture": "#all", "uv": [0, 0, 6, 4]},
-        "up":    {"texture": "#all", "uv": [0, 0, 4, 6]},
-        "down":  {"texture": "#all", "uv": [0, 0, 4, 6]}
+        "east": {
+          "texture": "#side",
+          "uv": [
+            10.2857,
+            0,
+            0,
+            16
+          ]
+        },
+        "west": {
+          "texture": "#side",
+          "uv": [
+            0,
+            0,
+            10.2857,
+            16
+          ]
+        },
+        "up": {
+          "texture": "#side",
+          "uv": [
+            0,
+            0,
+            10.2857,
+            16
+          ],
+          "rotation": 90
+        },
+        "down": {
+          "texture": "#side",
+          "uv": [
+            0,
+            0,
+            10.2857,
+            16
+          ],
+          "rotation": 270
+        }
       }
     }
   ]
