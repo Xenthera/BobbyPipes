@@ -84,6 +84,40 @@ public final class CraftJobPolicy {
     }
 
     /**
+     * How many complete runs' worth of output to extract right now.
+     *
+     * <p>Mirrors {@link #gatherBatchRuns} on the way out: rather than shipping every single
+     * run the moment it is ready (one item at a time behind a fast auto-crafter), let output
+     * pile up in the crafter's own output slot and take it in one batch. The batch never
+     * exceeds what remains on the job or what the output slot can physically hold before the
+     * crafter itself pauses ({@code outputCapRuns}).
+     *
+     * <p>{@code moreComing} is the escape hatch: if the input buffer cannot support another
+     * run right now, nothing more is going to appear until the next gather, so waiting any
+     * longer would only stall the job for no benefit  -  take what is ready instead.
+     *
+     * @param availableRuns runs' worth of result already sitting in the crafter
+     * @param runsRemaining runs left on the job
+     * @param outputCapRuns runs' worth that fit in the output slot before it maxes out
+     * @param moreComing    true while the input buffer can still support another run
+     *                      without another gather
+     * @return 0 to keep accumulating; otherwise how many runs to extract now
+     */
+    public static int extractBatchRuns(int availableRuns,
+                                       int runsRemaining,
+                                       int outputCapRuns,
+                                       boolean moreComing) {
+        if (availableRuns <= 0 || runsRemaining <= 0) {
+            return 0;
+        }
+        int target = Math.max(1, Math.min(runsRemaining, outputCapRuns));
+        if (availableRuns >= target || !moreComing) {
+            return Math.min(availableRuns, runsRemaining);
+        }
+        return 0;
+    }
+
+    /**
      * Merge per-slot ingredient counts that share a buffer key.
      *
      * <p>Shaped recipes list each matrix slot separately (two shells -> two entries of 1).

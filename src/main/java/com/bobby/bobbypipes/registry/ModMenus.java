@@ -5,6 +5,7 @@ import com.bobby.bobbypipes.menu.AutocraftMonitorMenu;
 import com.bobby.bobbypipes.menu.BasicPipeMenu;
 import com.bobby.bobbypipes.menu.CraftingPipeMenu;
 import com.bobby.bobbypipes.menu.PatternTableMenu;
+import com.bobby.bobbypipes.menu.ProviderPipeMenu;
 import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.menu.SatellitePipeMenu;
 import com.bobby.bobbypipes.menu.SupplierPipeMenu;
@@ -25,6 +26,9 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<BasicPipeMenu>> BASIC_PIPE =
             MENUS.register("basic_pipe", () -> IMenuTypeExtension.create(BasicPipeMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<ProviderPipeMenu>> PROVIDER_PIPE =
+            MENUS.register("provider_pipe", () -> IMenuTypeExtension.create(ProviderPipeMenu::new));
 
     public static final DeferredHolder<MenuType<?>, MenuType<PatternTableMenu>> PATTERN_TABLE =
             MENUS.register("pattern_table", () -> IMenuTypeExtension.create(PatternTableMenu::new));

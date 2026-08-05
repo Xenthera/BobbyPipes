@@ -1,6 +1,5 @@
 package com.bobby.bobbypipes.network;
 
-import com.bobby.bobbypipes.block.ProviderPipeBlock;
 import com.bobby.bobbypipes.request.DeliveryLedger;
 import com.bobby.bobbypipes.transit.ItemShipment;
 import com.bobby.bobbypipes.transit.ParcelTracker;
@@ -18,16 +17,20 @@ import java.util.List;
 /**
  * Drains accepted withdrawals through providers at their send rate.
  *
- * <p>Basic providers send {@link ProviderPipeBlock#ITEMS_PER_PULSE} items every
- * {@link ProviderPipeBlock#PULSE_INTERVAL_TICKS} ticks, each pulse becoming its own parcel.
+ * <p>Uses the network's shared {@link ExtractPulseBudget}:
+ * {@link PipeExtractRates#ITEMS_PER_PULSE} items every
+ * {@link PipeExtractRates#PULSE_INTERVAL_TICKS} ticks, each pulse becoming its own parcel.
  * Large requests stay queued at the source until the provider has budget; stock is held via
  * {@link #queued} until extracted.
  */
 public final class ProviderSendQueue {
 
     private final List<Job> jobs = new ArrayList<>();
-    private final ProviderPulseBudget<BlockPos> budget = new ProviderPulseBudget<>(
-            ProviderPipeBlock.ITEMS_PER_PULSE, ProviderPipeBlock.PULSE_INTERVAL_TICKS);
+    private final ExtractPulseBudget<BlockPos> budget;
+
+    public ProviderSendQueue(ExtractPulseBudget<BlockPos> budget) {
+        this.budget = budget;
+    }
 
     /**
      * Queues {@code amount} to pull from {@code source} toward {@code dest}.
@@ -47,6 +50,17 @@ public final class ProviderSendQueue {
         int total = 0;
         for (Job job : jobs) {
             if (job.source.equals(source) && job.item.equals(item)) {
+                total += job.remaining;
+            }
+        }
+        return total;
+    }
+
+    /** Total items still waiting to leave {@code source}, across every queued job. */
+    public int queuedFrom(BlockPos source) {
+        int total = 0;
+        for (Job job : jobs) {
+            if (job.source.equals(source)) {
                 total += job.remaining;
             }
         }
@@ -141,8 +155,8 @@ public final class ProviderSendQueue {
             int want = Math.min(job.remaining, allow);
             // Resolved before the extract, while the container still holds the item, so
             // the parcel sets off from the arm it actually came out of.
-            Direction from = InventoryAccess.sideHolding(level, job.source, job.item).orElse(null);
-            int taken = InventoryAccess.extract(level, job.source, job.item, want);
+            Direction from = ProviderAccess.sideHolding(level, job.source, job.item).orElse(null);
+            int taken = ProviderAccess.extract(level, job.source, job.item, want);
             if (taken <= 0) {
                 // Chest emptied or pipe broken  -  drop the rest of this job.
                 iterator.remove();

@@ -81,7 +81,7 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
             if (!isProvider(pipe)) {
                 continue;
             }
-            int held = InventoryAccess.countUnclaimed(level, pipe, item, claimedStores);
+            int held = ProviderAccess.countUnclaimed(level, pipe, item, claimedStores);
             if (held <= 0) {
                 continue;
             }
@@ -155,7 +155,7 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
         for (BlockPos pipe : providerNodesByDistance()) {
             if (isProvider(pipe)) {
                 for (Map.Entry<ItemResource, Integer> held
-                        : InventoryAccess.summarizeUnclaimed(level, pipe, claimedStores).entrySet()) {
+                        : ProviderAccess.summarizeUnclaimed(level, pipe, claimedStores).entrySet()) {
                     int free = held.getValue() - sendQueue.queued(pipe, held.getKey());
                     if (free > 0) {
                         totals.merge(held.getKey(), free, Integer::sum);

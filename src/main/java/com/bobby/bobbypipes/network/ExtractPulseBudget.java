@@ -4,20 +4,21 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Per-provider send allowance: {@code itemsPerPulse} items every {@code intervalTicks}.
+ * Per-pipe extract allowance: {@code itemsPerPulse} items every {@code intervalTicks}.
  *
- * <p>Loader-agnostic so the refill math can be unit-tested without a world.
+ * <p>Loader-agnostic so the refill math can be unit-tested without a world. Shared across
+ * providers, crafters, and any other pipe that pulls from an adjacent inventory.
  *
- * @param <N> provider identity
+ * @param <N> pipe identity
  */
-public final class ProviderPulseBudget<N> {
+public final class ExtractPulseBudget<N> {
 
     private final int itemsPerPulse;
     private final int intervalTicks;
     private final Map<N, Long> nextPulseTick = new HashMap<>();
     private final Map<N, Integer> pulseRemaining = new HashMap<>();
 
-    public ProviderPulseBudget(int itemsPerPulse, int intervalTicks) {
+    public ExtractPulseBudget(int itemsPerPulse, int intervalTicks) {
         if (itemsPerPulse < 1) {
             throw new IllegalArgumentException("itemsPerPulse must be at least 1, got " + itemsPerPulse);
         }
@@ -28,7 +29,12 @@ public final class ProviderPulseBudget<N> {
         this.intervalTicks = intervalTicks;
     }
 
-    /** Items {@code source} may still send during the current pulse window. */
+    public static <N> ExtractPulseBudget<N> basic() {
+        return new ExtractPulseBudget<>(
+                PipeExtractRates.ITEMS_PER_PULSE, PipeExtractRates.PULSE_INTERVAL_TICKS);
+    }
+
+    /** Items {@code source} may still extract during the current pulse window. */
     public int budget(N source, long gameTime) {
         Long next = nextPulseTick.get(source);
         if (next == null || gameTime >= next) {

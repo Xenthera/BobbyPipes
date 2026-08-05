@@ -1,17 +1,15 @@
 package com.bobby.bobbypipes.client.screen;
 
+import com.bobby.bobbycore.client.gui.theme.BobbyThemes;
+
 /**
- * Colours shared by the mod's container screens.
- *
- * <p>Vanilla hardcodes its panel labels to a dark grey chosen for the stone-coloured
- * vanilla backgrounds. Every panel in this mod is a saturated colour instead, where that
- * grey reads as a smudge, so the screens draw their own labels in white rather than
- * calling {@code super.extractLabels}.
+ * Domain colours shared by BobbyPipes screens. Panel chrome comes from BobbyCore themes;
+ * marker greens/reds stay as pipe-arm connection colours.
  */
 final class PanelStyle {
 
     /** Panel titles and the player inventory label. */
-    static final int LABEL = 0xFF_FF_FF_FF;
+    static final int LABEL = BobbyThemes.BOBBY_DARK.labelPrimary();
 
     /**
      * The pipe's own connection colours, lifted pixel for pixel from the arm textures.

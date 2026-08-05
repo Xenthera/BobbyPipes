@@ -57,17 +57,56 @@ public final class PipeNetwork {
      */
     private static final int TICKS_PER_HOP = 8;
 
+    /**
+     * Extra distance a hop covers when it runs down a container arm instead of just pipe
+     * centre to pipe centre  -  must match {@code ParcelDebugRenderer.ARM_OFFSET}, which is
+     * what actually draws that arm on the client.
+     */
+    private static final float ARM_OFFSET_BLOCKS = 1.0f;
+
+    /**
+     * Authoritative per-hop timing: an ordinary hop is the base rate, but the very first
+     * hop off a real inventory (entry side set  -  a drift capture has none, so it stays
+     * unextended) and the hop landing on the destination each cover one extra arm's worth
+     * of distance, so they take proportionally longer. This is what the client renders
+     * from directly ({@code ParcelSyncPayload.Entry#ticksForHop}) instead of guessing its
+     * own duration  -  there is nothing left for it to fall out of sync with, because the
+     * server actually takes this long, not just fixed-tick-always with a slower-looking
+     * render layered on top.
+     */
+    private static final ParcelTracker.HopLength<BlockPos, ItemShipment> HOP_LENGTH =
+            (at, next, origin, destination, payload) -> {
+                float blocks = 1.0f;
+                if (at.equals(origin) && payload.entrySide() != null) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                if (next.equals(destination)) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                return Math.round(TICKS_PER_HOP * blocks);
+            };
+
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
     private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
-    private final ParcelTracker<BlockPos, ItemShipment> parcels = new ParcelTracker<>(TICKS_PER_HOP);
+    private final ParcelTracker<BlockPos, ItemShipment> parcels =
+            new ParcelTracker<>(TICKS_PER_HOP, HOP_LENGTH);
     private final DriftTracker drift;
-    private final ProviderSendQueue sendQueue = new ProviderSendQueue();
+    /** Shared by providers, crafters, and any other pipe that extracts from inventories. */
+    private final ExtractPulseBudget<BlockPos> extractBudget = ExtractPulseBudget.basic();
+    private final ProviderSendQueue sendQueue = new ProviderSendQueue(extractBudget);
     private final CraftJobManager craftJobs = new CraftJobManager();
 
     /** Last scanned pipe lattice; used to paint routed-exit marks after a rebuild. */
     private Topology<BlockPos> lastLattice = Topology.empty();
     private Set<BlockPos> lastSmart = Set.of();
+
+    /**
+     * Seeds queued by {@link #invalidate} since the last rebuild. Collapsing place/break
+     * bursts into one solve still has to re-scan every touched component on world load,
+     * where the previous snapshot is empty.
+     */
+    private final Set<BlockPos> pendingSeeds = new HashSet<>();
 
     /** Avoid spamming empty parcel snapshots once the network is quiet. */
     private boolean lastParcelSyncWasEmpty = true;
@@ -95,6 +134,11 @@ public final class PipeNetwork {
     /** Withdrawals waiting to leave providers at their send rate. */
     public ProviderSendQueue sendQueue() {
         return sendQueue;
+    }
+
+    /** Per-pipe extract pulse budget shared by every extracting pipe on this network. */
+    public ExtractPulseBudget<BlockPos> extractBudget() {
+        return extractBudget;
     }
 
     /** Autocraft jobs waiting on inputs or mid-chain. */
@@ -133,6 +177,9 @@ public final class PipeNetwork {
     public static synchronized void forget(ServerLevel level) {
         PipeNetwork network = INSTANCES.remove(level);
         if (network != null) {
+            synchronized (network.pendingSeeds) {
+                network.pendingSeeds.clear();
+            }
             network.cache.clear();
             network.drift.clear();
         }
@@ -156,10 +203,16 @@ public final class PipeNetwork {
      * <p>Called from block place and break. The world is still mid-update at that point,
      * so the actual read is deferred to the next tick, by which time the change has
      * settled and any neighbouring changes in the same batch have landed too.
+     *
+     * <p>Seeds accumulate until the next rebuild so a burst of chunk loads on boot can
+     * rediscover every loaded component, not only the last one invalidated.
      */
     public void invalidate(BlockPos origin) {
         BlockPos seed = origin.immutable();
-        cache.invalidate(() -> readWorld(seed));
+        synchronized (pendingSeeds) {
+            pendingSeeds.add(seed);
+        }
+        cache.invalidate(this::readPendingWorld);
     }
 
     /**
@@ -262,13 +315,16 @@ public final class PipeNetwork {
                     parcel.atNode(),
                     Optional.ofNullable(parcel.nextHop()),
                     parcel.ticksIntoHop(),
+                    parcel.ticksForHop(),
                     stack,
                     enterFrom,
-                    exitTo));
+                    exitTo,
+                    true));
         }
         // Drifting items ride the same sync so they draw like anything else in a pipe.
-        // Their hop is slower, so progress is rescaled into parcel ticks rather than
-        // sending a second rate the renderer would have to special case.
+        // ticksIntoHop is the raw drift clock (longer than routed); the client uses
+        // {@link DriftTracker#SPEED_FACTOR} to size the hop, so do not rescale into
+        // routed ticks here or both speeds collapse to the same look.
         for (DriftTracker.Drifting drifting : drift.items()) {
             ItemStack stack = drifting.item().toStack(drifting.count());
             if (stack.isEmpty()) {
@@ -283,9 +339,6 @@ public final class PipeNetwork {
             // another pipe. Sending its own position as the next node gives the renderer a
             // path of centre -> arm, so it is animated out the same way a routed parcel is
             // animated into its destination rather than vanishing at the pipe centre.
-            int legTicks = drifting.leaving() ? drift.armTicks() : drift.ticksPerHop();
-            int scaled = Math.round(
-                    drifting.ticksIntoHop() * (TICKS_PER_HOP / (float) legTicks));
             // On its very first hop the side it came from is whatever pushed it in, so an
             // item fed by a hopper sets off from that arm. On later hops that side is just
             // the pipe behind it, and prepending its arm would draw the item backing up
@@ -301,10 +354,12 @@ public final class PipeNetwork {
                     drifting.leaving()
                             ? Optional.of(drifting.at())
                             : Optional.ofNullable(drifting.next()),
-                    Math.min(scaled, TICKS_PER_HOP),
+                    drifting.ticksIntoHop(),
+                    drifting.ticksForHop(),
                     stack,
                     pushedIn,
-                    Optional.ofNullable(drifting.exitTo())));
+                    Optional.ofNullable(drifting.exitTo()),
+                    false));
         }
 
         PacketDistributor.sendToPlayersInDimension(
@@ -404,10 +459,25 @@ public final class PipeNetwork {
      * <p>Publishing only the seed's component used to wipe every other network in the
      * level on a single place/break, which stranded unrelated parcels  -  hence the merge.
      */
+    private Topology<BlockPos> readPendingWorld() {
+        Set<BlockPos> seeds;
+        synchronized (pendingSeeds) {
+            seeds = Set.copyOf(pendingSeeds);
+            pendingSeeds.clear();
+        }
+        return readWorld(seeds);
+    }
+
     private Topology<BlockPos> readWorld(BlockPos seed) {
+        return readWorld(Set.of(seed.immutable()));
+    }
+
+    private Topology<BlockPos> readWorld(Set<BlockPos> seeds) {
         Topology.Builder<BlockPos> builder = Topology.builder();
         Set<BlockPos> covered = new HashSet<>();
-        absorbComponent(seed, builder, covered);
+        for (BlockPos seed : seeds) {
+            absorbComponent(seed, builder, covered);
+        }
 
         // Previous snapshot nodes may be corridor intermediates; also re-scan from every
         // smart pipe still in the world so disconnected components are not dropped.

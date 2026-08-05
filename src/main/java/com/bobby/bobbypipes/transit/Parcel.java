@@ -19,6 +19,10 @@ package com.bobby.bobbypipes.transit;
  * @param atNode       the node it currently occupies
  * @param nextHop      the node it is moving toward, or null if it has nowhere to go
  * @param ticksIntoHop how far along the current hop it is
+ * @param ticksForHop  how many ticks the current hop takes; set once when the hop begins
+ *                     ({@link ParcelTracker.HopLength}), not recomputed mid-hop, so a
+ *                     renderer following {@code ticksIntoHop}/{@code ticksForHop} can never
+ *                     fall out of step with what actually happened on the server
  * @param revision     the routing revision {@code nextHop} was computed against
  * @param <N>          node identity
  * @param <P>          payload type
@@ -31,6 +35,7 @@ public record Parcel<N, P>(
         N atNode,
         N nextHop,
         int ticksIntoHop,
+        int ticksForHop,
         long revision) {
 
     public boolean hasArrived() {
@@ -53,15 +58,18 @@ public record Parcel<N, P>(
         return Math.min(1.0f, (float) ticksIntoHop / ticksPerHop);
     }
 
-    Parcel<N, P> withRoute(N newNextHop, long newRevision) {
-        return new Parcel<>(id, payload, origin, destination, atNode, newNextHop, ticksIntoHop, newRevision);
+    Parcel<N, P> withRoute(N newNextHop, long newRevision, int newTicksForHop) {
+        return new Parcel<>(id, payload, origin, destination, atNode, newNextHop,
+                ticksIntoHop, newTicksForHop, newRevision);
     }
 
     Parcel<N, P> advanced() {
-        return new Parcel<>(id, payload, origin, destination, atNode, nextHop, ticksIntoHop + 1, revision);
+        return new Parcel<>(id, payload, origin, destination, atNode, nextHop,
+                ticksIntoHop + 1, ticksForHop, revision);
     }
 
-    Parcel<N, P> movedToNextHop(N newNextHop) {
-        return new Parcel<>(id, payload, origin, destination, nextHop, newNextHop, 0, revision);
+    Parcel<N, P> movedToNextHop(N newNextHop, int newTicksForHop) {
+        return new Parcel<>(id, payload, origin, destination, nextHop, newNextHop,
+                0, newTicksForHop, revision);
     }
 }

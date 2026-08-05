@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class ProviderPulseBudgetTest {
+class ExtractPulseBudgetTest {
 
     @Test
-    @DisplayName("a fresh provider gets a full pulse immediately")
+    @DisplayName("a fresh pipe gets a full pulse immediately")
     void fullPulseOnFirstAsk() {
-        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+        ExtractPulseBudget<String> budget = new ExtractPulseBudget<>(8, 5);
 
         assertEquals(8, budget.budget("a", 100));
     }
@@ -19,7 +19,7 @@ class ProviderPulseBudgetTest {
     @Test
     @DisplayName("consume drains the current pulse; no refill until the interval elapses")
     void drainsUntilInterval() {
-        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+        ExtractPulseBudget<String> budget = new ExtractPulseBudget<>(8, 5);
 
         assertEquals(8, budget.budget("a", 0));
         budget.consume("a", 8);
@@ -31,7 +31,7 @@ class ProviderPulseBudgetTest {
     @Test
     @DisplayName("partial consume leaves the rest of the pulse available")
     void partialConsume() {
-        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+        ExtractPulseBudget<String> budget = new ExtractPulseBudget<>(8, 5);
 
         budget.budget("a", 0);
         budget.consume("a", 3);
@@ -40,9 +40,9 @@ class ProviderPulseBudgetTest {
     }
 
     @Test
-    @DisplayName("each provider has its own pulse window")
+    @DisplayName("each pipe has its own pulse window")
     void independentSources() {
-        ProviderPulseBudget<String> budget = new ProviderPulseBudget<>(8, 5);
+        ExtractPulseBudget<String> budget = new ExtractPulseBudget<>(8, 5);
 
         budget.budget("a", 0);
         budget.consume("a", 8);
@@ -54,7 +54,7 @@ class ProviderPulseBudgetTest {
     @Test
     @DisplayName("invalid construction is rejected")
     void rejectsNonPositive() {
-        assertThrows(IllegalArgumentException.class, () -> new ProviderPulseBudget<>(0, 5));
-        assertThrows(IllegalArgumentException.class, () -> new ProviderPulseBudget<>(8, 0));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractPulseBudget<>(0, 5));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractPulseBudget<>(8, 0));
     }
 }

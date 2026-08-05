@@ -90,7 +90,7 @@ public final class InventoryAccess {
     }
 
     @FunctionalInterface
-    private interface HandlerVisitor {
+    interface HandlerVisitor {
         void visit(ResourceHandler<ItemResource> handler, Object identity);
     }
 
@@ -98,10 +98,10 @@ public final class InventoryAccess {
      * Visits each distinct storage touching {@code pipe} that is not already in
      * {@code claimed}, then adds its identity to {@code claimed}.
      */
-    private static void forEachUnclaimed(ServerLevel level,
-                                         BlockPos pipe,
-                                         Set<Object> claimed,
-                                         HandlerVisitor visitor) {
+    static void forEachUnclaimed(ServerLevel level,
+                                 BlockPos pipe,
+                                 Set<Object> claimed,
+                                 HandlerVisitor visitor) {
         Set<Object> seenOnPipe = new HashSet<>();
         for (Direction direction : Direction.values()) {
             BlockPos neighbour = pipe.relative(direction);
@@ -425,8 +425,8 @@ public final class InventoryAccess {
         return total;
     }
 
-    private static ResourceHandler<ItemResource> handlerAt(ServerLevel level, BlockPos pipe,
-                                                           Direction direction) {
+    static ResourceHandler<ItemResource> handlerAt(ServerLevel level, BlockPos pipe,
+                                                   Direction direction) {
         BlockPos neighbour = pipe.relative(direction);
         if (!level.hasChunkAt(neighbour)) {
             return null;

@@ -47,16 +47,25 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
     /**
      * One parcel's render-relevant state.
      *
-     * @param next empty when the parcel is stuck or delivering in place
+     * @param next        empty when the parcel is stuck or delivering in place
+     * @param ticksForHop how long this specific hop actually takes on the server  -
+     *                    authoritative, sent directly rather than left for the client to
+     *                    guess from {@code enterFrom}/{@code exitTo}, so there is nothing
+     *                    for the render clock to independently compute and fall out of
+     *                    step with what the server is really doing
+     * @param routed      true for logistics parcels (draw the pipe cage); false for
+     *                    drifting items in plain pipe
      */
     public record Entry(
             long id,
             BlockPos at,
             Optional<BlockPos> next,
             int ticksIntoHop,
+            int ticksForHop,
             ItemStack stack,
             Optional<Direction> enterFrom,
-            Optional<Direction> exitTo) {
+            Optional<Direction> exitTo,
+            boolean routed) {
 
         public static final StreamCodec<RegistryFriendlyByteBuf, Entry> STREAM_CODEC =
                 StreamCodec.composite(
@@ -64,9 +73,11 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
                         BlockPos.STREAM_CODEC, Entry::at,
                         ByteBufCodecs.optional(BlockPos.STREAM_CODEC), Entry::next,
                         ByteBufCodecs.VAR_INT, Entry::ticksIntoHop,
+                        ByteBufCodecs.VAR_INT, Entry::ticksForHop,
                         ItemStack.STREAM_CODEC, Entry::stack,
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::enterFrom,
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::exitTo,
+                        ByteBufCodecs.BOOL, Entry::routed,
                         Entry::new);
     }
 }

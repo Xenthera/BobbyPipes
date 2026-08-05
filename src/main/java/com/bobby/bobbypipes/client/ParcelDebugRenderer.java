@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.client;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.network.payload.ParcelSyncPayload;
+import com.bobby.bobbypipes.registry.ModItems;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -25,15 +26,16 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Rudimentary in-pipe item drawing for debugging transit.
+ * In-pipe item drawing for parcels in transit.
  *
- * <p>Extracts item models into level render state, then submits them along the hop.
- * Not the final parcel renderer  -  just enough to watch items move.
+ * <p>Routed logistics parcels get a dumb-pipe centre cube (97% scale) around the cargo;
+ * drifting items in plain pipe do not.
  */
 @EventBusSubscriber(modid = BobbyPipes.MOD_ID, value = Dist.CLIENT)
 public final class ParcelDebugRenderer {
@@ -43,6 +45,14 @@ public final class ParcelDebugRenderer {
 
     /** Scale relative to a full-block ground item. */
     private static final float SCALE = 0.55f;
+
+    /**
+     * Routed-parcel cage scale in the same GROUND pose space as cargo ({@link #SCALE}).
+     *
+     * <p>GROUND already shrinks item models; values above 1 are needed for the frame to
+     * read larger than the cargo.
+     */
+    private static final float CAGE_SCALE = 1.75f;
 
     /**
      * Extra scale for block items.
@@ -67,17 +77,10 @@ public final class ParcelDebugRenderer {
      * How far an arm tip sits from the pipe centre (must match {@link #armPoint}).
      *
      * <p>One block reaches the centre of the neighbouring inventory, so the item finishes
-     * inside the chest rather than vanishing halfway down the stub.
+     * inside the chest rather than vanishing halfway down the stub. Same length as a
+     * centre-to-centre pipe hop, so arm legs use the same travel time per block.
      */
-    private static final double ARM_OFFSET = 1.0;
-
-    /**
-     * Fraction of one hop spent on an enter/exit arm.
-     *
-     * <p>Kept well below a full centre-to-centre share so the longer arm still moves at
-     * about pipe speed ({@code ARM_OFFSET / ARM_SHARE ≈ 1} block per hop).
-     */
-    private static final float ARM_SHARE = 0.45f;
+    static final double ARM_OFFSET = 1.0;
 
     private ParcelDebugRenderer() {
     }
@@ -103,6 +106,18 @@ public final class ParcelDebugRenderer {
         float partialTick = event.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         long clientGameTime = event.getLevel().getGameTime();
         List<ClientParcels.Drawn> entries = ClientParcels.sample(clientGameTime, partialTick);
+
+        ItemStackRenderState cageState = null;
+        ItemStack cageStack = new ItemStack(ModItems.PARCEL_CAGE.get());
+        if (!cageStack.isEmpty()) {
+            cageState = new ItemStackRenderState();
+            // Same display context as cargo so ItemStackRenderState centres both alike.
+            resolver.updateForTopItem(
+                    cageState, cageStack, ItemDisplayContext.GROUND, event.getLevel(), null, 0);
+            if (cageState.isEmpty()) {
+                cageState = null;
+            }
+        }
 
         List<DrawnParcel> drawn = new ArrayList<>(entries.size());
         for (ClientParcels.Drawn entry : entries) {
@@ -137,7 +152,10 @@ public final class ParcelDebugRenderer {
                                   ((c * 6271) % 11 - 5) / 90.0,
                                   ((c * 4211) % 13 - 6) / 90.0);
                 boolean isBlock = stack.getItem() instanceof net.minecraft.world.item.BlockItem;
-                drawn.add(new DrawnParcel(offset, itemState, light, scaleFor(stack), isBlock));
+                // One cage per routed parcel (not per stack-copy clutter).
+                ItemStackRenderState cage = c == 0 && entry.routed() ? cageState : null;
+                drawn.add(new DrawnParcel(
+                        offset, itemState, light, scaleFor(stack), isBlock, cage));
             }
         }
 
@@ -158,20 +176,33 @@ public final class ParcelDebugRenderer {
         SubmitNodeCollector collector = event.getSubmitNodeCollector();
 
         for (DrawnParcel parcel : drawn) {
+            // One world pose for cargo and cage, no extra corner offsets on the cage.
             poseStack.pushPose();
             poseStack.translate(
                     parcel.pos().x - camera.x,
                     parcel.pos().y - camera.y,
                     parcel.pos().z - camera.z);
+
+            if (parcel.cage() != null) {
+                poseStack.pushPose();
+                poseStack.scale(CAGE_SCALE, CAGE_SCALE, CAGE_SCALE);
+                // Cage is a block-shaped item under GROUND, same cancel as block cargo.
+                poseStack.translate(0.0f, -BLOCK_GROUND_OFFSET, 0.0f);
+                parcel.cage().submit(
+                        poseStack, collector, parcel.light(), OverlayTexture.NO_OVERLAY, 0);
+                poseStack.popPose();
+            }
+
+            poseStack.pushPose();
             float scale = parcel.scale();
             poseStack.scale(scale, scale, scale);
             if (parcel.block()) {
-                // Applied after the scale so it lands in the same space the display
-                // transform's own translation does, cancelling it exactly.
+                // Cancels GROUND's +3/16 in the same scaled space the display transform uses.
                 poseStack.translate(0.0f, -BLOCK_GROUND_OFFSET, 0.0f);
             }
             parcel.item().submit(
                     poseStack, collector, parcel.light(), OverlayTexture.NO_OVERLAY, 0);
+            poseStack.popPose();
             poseStack.popPose();
         }
     }
@@ -179,11 +210,12 @@ public final class ParcelDebugRenderer {
     /**
      * Where a parcel sits for the current hop progress.
      *
-     * <p>Centre-to-centre motion keeps nearly the whole hop (same pace as a normal pipe
-     * leg). Enter/exit arms only take {@link #ARM_SHARE} of the hop each, so they move at
-     * about one block per hop  -  folding the arm into the same distance-weighted polyline
-     * as the trunk made the short stub eat a third of the tick budget and look sluggish
-     * going into a chest.
+     * <p>Progress (0 to 1) always spans the hop's authoritative, server-reported duration
+     * (the synced {@code ticksForHop}), and is split across the polyline (enter arm to
+     * centres to exit arm) below in proportion to each leg's length, so every leg moves at
+     * one uniform speed. A hop with an arm is quicker overall than a plain one, since it
+     * covers more ground in the same fixed time, but never speeds up partway through
+     * itself.
      */
     private static Vec3 hopPosition(ClientParcels.Drawn entry) {
         float progress = Mth.clamp(entry.progress(), 0.0f, 1.0f);
@@ -203,29 +235,23 @@ public final class ParcelDebugRenderer {
                     .orElse(atCenter);
         }
 
-        float enterShare = entry.enterFrom().isPresent() ? ARM_SHARE : 0.0f;
-        float exitShare = entry.exitTo().isPresent() ? ARM_SHARE : 0.0f;
-        // A one-hop chest→chest still needs a readable centre stretch.
-        float armTotal = enterShare + exitShare;
-        if (armTotal > 0.5f && armTotal > 0.0f) {
-            float scale = 0.5f / armTotal;
-            enterShare *= scale;
-            exitShare *= scale;
-        }
-        float midShare = Math.max(1.0e-4f, 1.0f - enterShare - exitShare);
+        float enterDist = entry.enterFrom().isPresent() ? (float) ARM_OFFSET : 0.0f;
+        float exitDist = entry.exitTo().isPresent() ? (float) ARM_OFFSET : 0.0f;
+        float midDist = 1.0f;
+        float total = Math.max(1.0e-4f, enterDist + midDist + exitDist);
+        float d = progress * total;
 
-        float t = progress;
-        if (enterShare > 0.0f && t <= enterShare) {
+        if (enterDist > 0.0f && d <= enterDist) {
             Direction side = entry.enterFrom().orElseThrow();
-            return armPoint(entry.at(), side).lerp(atCenter, t / enterShare);
+            return armPoint(entry.at(), side).lerp(atCenter, d / enterDist);
         }
-        t -= enterShare;
-        if (t <= midShare || exitShare <= 0.0f) {
-            return atCenter.lerp(nextCenter, Mth.clamp(t / midShare, 0.0f, 1.0f));
+        d -= enterDist;
+        if (d <= midDist || exitDist <= 0.0f) {
+            return atCenter.lerp(nextCenter, Mth.clamp(d / midDist, 0.0f, 1.0f));
         }
-        t -= midShare;
+        d -= midDist;
         Direction side = entry.exitTo().orElseThrow();
-        return nextCenter.lerp(armPoint(next, side), Mth.clamp(t / exitShare, 0.0f, 1.0f));
+        return nextCenter.lerp(armPoint(next, side), Mth.clamp(d / exitDist, 0.0f, 1.0f));
     }
 
     /**
@@ -262,6 +288,6 @@ public final class ParcelDebugRenderer {
     }
 
     private record DrawnParcel(Vec3 pos, ItemStackRenderState item, int light, float scale,
-                               boolean block) {
+                               boolean block, @Nullable ItemStackRenderState cage) {
     }
 }

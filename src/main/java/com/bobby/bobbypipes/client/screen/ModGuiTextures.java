@@ -26,6 +26,12 @@ public final class ModGuiTextures {
     /** 20×20 rim drawn over a selected request-grid slot (1px overhang). */
     public static final Identifier REQUEST_SLOT_SELECTED =
             Identifier.fromNamespaceAndPath(BobbyPipes.MOD_ID, "textures/gui/request_slot_selected.png");
+    /** Vanilla paper copy ({@code textures/item/paper.png}). */
+    public static final Identifier PAPER =
+            Identifier.fromNamespaceAndPath(BobbyPipes.MOD_ID, "textures/gui/paper.png");
+    /** Same paper shape with white filled black (alpha preserved). */
+    public static final Identifier BLACK_PAPER =
+            Identifier.fromNamespaceAndPath(BobbyPipes.MOD_ID, "textures/gui/black_paper.png");
 
     private ModGuiTextures() {
     }

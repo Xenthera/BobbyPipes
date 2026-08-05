@@ -18,6 +18,7 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -407,7 +408,8 @@ public final class CraftJobManager {
                 if (!tryExtractOutput(level, network, job, pattern, satellites)) {
                     continue;
                 }
-                job.runsRemaining--;
+                job.runsRemaining -= Math.max(1, job.outputLeftRuns);
+                job.outputLeftRuns = 0;
                 if (job.runsRemaining <= 0) {
                     completeJob(level, network, job, pattern, satellites);
                     iterator.remove();
@@ -803,8 +805,14 @@ public final class CraftJobManager {
         return false;
     }
 
-    /** Cap so a 1000x request fills the buffer in waves instead of one giant flood. */
-    private static final int MAX_GATHER_BATCH_RUNS = 32;
+    /**
+     * Cap so an absurd request (a million-x order) still fills the buffer in waves instead
+     * of one giant flood. In practice this rarely binds: {@link CraftJobPolicy#gatherBatchRuns}
+     * already limits runs to what {@code have + insertable} can physically hold, so raising
+     * this just lets ordinary large orders (dozens to a couple hundred runs of an
+     * intermediate) gather in one wave instead of several.
+     */
+    private static final int MAX_GATHER_BATCH_RUNS = 256;
 
     /**
      * Orders whatever this job is still short of for as many runs as the buffers can fit.
@@ -1017,7 +1025,18 @@ public final class CraftJobManager {
     }
 
     /**
-     * Probe all results, extract all, then ship. On shortfall, put back what was taken.
+     * Extracts a batch of finished runs at the shared pipe extract rate, then ships each
+     * chunk.
+     *
+     * <p>Does not ship the moment one run is ready  -  a fast auto-crafter producing one run
+     * a tick would otherwise fire single-item parcels onto the pipe every tick. Instead lets
+     * runs pile up in the crafter's own output slot (see {@link CraftJobPolicy#extractBatchRuns})
+     * and takes a whole batch at once, still dripped out at the shared extract pulse rate so
+     * a big batch does not dump onto the network in one tick either. The batch target is the
+     * output slot's own stack capacity, so this can never leave the crafter jammed: it always
+     * either reaches that cap or, if the input buffer runs dry first, flushes immediately.
+     *
+     * @return true when the current batch has been fully extracted and shipped
      */
     private boolean tryExtractOutput(ServerLevel level,
                                      PipeNetwork network,
@@ -1028,35 +1047,89 @@ public final class CraftJobManager {
         if (results.isEmpty()) {
             return false;
         }
-        for (CraftPattern.CountedIngredient result : results) {
-            if (InventoryAccess.count(level, job.crafter, result.item()) < result.count()) {
+
+        if (job.outputLeft == null) {
+            int available = availableRuns(level, job.crafter, results);
+            boolean moreComing = gatherComplete(level, job, pattern, satellites);
+            int runs = CraftJobPolicy.extractBatchRuns(
+                    available, job.runsRemaining, outputCapRuns(results), moreComing);
+            if (runs <= 0) {
                 return false;
             }
+            job.outputLeft = new LinkedHashMap<>();
+            for (CraftPattern.CountedIngredient result : results) {
+                job.outputLeft.merge(result.item(), result.count() * runs, Integer::sum);
+            }
+            job.outputLeftRuns = runs;
         }
 
-        List<Extracted> taken = new ArrayList<>(results.size());
-        for (CraftPattern.CountedIngredient result : results) {
+        int allow = network.extractBudget().budget(job.crafter, level.getGameTime());
+        if (allow <= 0) {
+            return false;
+        }
+
+        for (Map.Entry<ItemResource, Integer> entry : job.outputLeft.entrySet()) {
+            if (allow <= 0) {
+                break;
+            }
+            int left = entry.getValue();
+            if (left <= 0) {
+                continue;
+            }
+            ItemResource item = entry.getKey();
+            int available = InventoryAccess.count(level, job.crafter, item);
+            int want = Math.min(Math.min(left, allow), available);
+            if (want <= 0) {
+                continue;
+            }
             // Read the machine face before the extract empties it, so the parcel leaves
             // through the arm touching the machine rather than out of the pipe centre.
-            Direction from =
-                    InventoryAccess.sideHolding(level, job.crafter, result.item()).orElse(null);
-            int got = InventoryAccess.extract(level, job.crafter, result.item(), result.count());
-            if (got < result.count()) {
-                if (got > 0) {
-                    InventoryAccess.insertOrDrop(level, job.crafter, result.item(), got);
-                }
-                for (Extracted prior : taken) {
-                    InventoryAccess.insertOrDrop(level, job.crafter, prior.item(), prior.count());
-                }
-                return false;
+            Direction from = InventoryAccess.sideHolding(level, job.crafter, item).orElse(null);
+            int got = InventoryAccess.extract(level, job.crafter, item, want);
+            if (got <= 0) {
+                continue;
             }
-            taken.add(new Extracted(result.item(), got, from));
+            network.extractBudget().consume(job.crafter, got);
+            allow -= got;
+            entry.setValue(left - got);
+            shipOutput(level, network, job, item, got, from, satellites);
         }
-        for (Extracted extracted : taken) {
-            shipOutput(level, network, job, extracted.item(), extracted.count(),
-                    extracted.from(), satellites);
+
+        job.outputLeft.entrySet().removeIf(e -> e.getValue() <= 0);
+        if (job.outputLeft.isEmpty()) {
+            job.outputLeft = null;
+            return true;
         }
-        return true;
+        return false;
+    }
+
+    /** Complete runs' worth of result currently sitting in the crafter. */
+    private static int availableRuns(ServerLevel level,
+                                      BlockPos crafter,
+                                      List<CraftPattern.CountedIngredient> results) {
+        int runs = Integer.MAX_VALUE;
+        for (CraftPattern.CountedIngredient result : results) {
+            int per = Math.max(1, result.count());
+            int have = InventoryAccess.count(level, crafter, result.item());
+            runs = Math.min(runs, have / per);
+        }
+        return runs == Integer.MAX_VALUE ? 0 : runs;
+    }
+
+    /**
+     * Runs' worth of result that fit in the output slot before the crafter itself refuses
+     * to make more (see {@code PatternTableBlockEntity}'s output-slot stack size check).
+     * Naturally caps at 1 for non-stackable results, which just falls back to today's
+     * one-at-a-time behaviour  -  correct, since the slot cannot hold more than that anyway.
+     */
+    private static int outputCapRuns(List<CraftPattern.CountedIngredient> results) {
+        int runs = Integer.MAX_VALUE;
+        for (CraftPattern.CountedIngredient result : results) {
+            int per = Math.max(1, result.count());
+            int maxStack = Math.max(1, result.item().toStack(1).getMaxStackSize());
+            runs = Math.min(runs, Math.max(1, maxStack / per));
+        }
+        return runs == Integer.MAX_VALUE ? 1 : runs;
     }
 
     /**
@@ -1361,7 +1434,7 @@ public final class CraftJobManager {
                 return;
             }
             Direction from = InventoryAccess.sideHolding(level, pipe, item).orElse(null);
-            int taken = InventoryAccess.extract(level, pipe, item, sink.accept());
+            int taken = PipeExtract.extract(level, network, pipe, item, sink.accept());
             if (taken <= 0) {
                 return;
             }
@@ -1372,12 +1445,8 @@ public final class CraftJobManager {
             InventoryAccess.insertOrDrop(level, pipe, item, taken);
             return;
         }
-        int taken = InventoryAccess.extract(level, pipe, item, count);
+        int taken = PipeExtract.extract(level, network, pipe, item, count);
         InventoryAccess.drop(level, pipe, item, taken);
-    }
-
-    /** @param from the machine face the item came out of, null if it could not be read */
-    private record Extracted(ItemResource item, int count, Direction from) {
     }
 
     private record FeedTarget(BlockPos dest, int need) {
@@ -1425,6 +1494,13 @@ public final class CraftJobManager {
          * fresh job from taking output a player left in the table.
          */
         private boolean requestedThisRun;
+        /**
+         * Results still owed for the current extract cycle, or {@code null} when not mid-extract.
+         * Populated once a batch of runs is buffered, then dripped at the shared extract rate.
+         */
+        private Map<ItemResource, Integer> outputLeft;
+        /** How many runs {@link #outputLeft} represents, for the {@code runsRemaining} decrement. */
+        private int outputLeftRuns;
 
         private Job(long id,
                     long requestId,

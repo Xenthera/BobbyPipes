@@ -5,6 +5,7 @@ import com.bobby.bobbypipes.client.screen.AutocraftMonitorScreen;
 import com.bobby.bobbypipes.client.screen.BasicPipeScreen;
 import com.bobby.bobbypipes.client.screen.CraftingPipeScreen;
 import com.bobby.bobbypipes.client.screen.PatternTableScreen;
+import com.bobby.bobbypipes.client.screen.ProviderPipeScreen;
 import com.bobby.bobbypipes.client.screen.RequestScreen;
 import com.bobby.bobbypipes.client.screen.SatellitePipeScreen;
 import com.bobby.bobbypipes.client.screen.SupplierPipeScreen;
@@ -33,6 +34,7 @@ public final class ClientMenus {
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.REQUEST.get(), RequestScreen::new);
         event.register(ModMenus.BASIC_PIPE.get(), BasicPipeScreen::new);
+        event.register(ModMenus.PROVIDER_PIPE.get(), ProviderPipeScreen::new);
         event.register(ModMenus.PATTERN_TABLE.get(), PatternTableScreen::new);
         event.register(ModMenus.CRAFTING_PIPE.get(), CraftingPipeScreen::new);
         event.register(ModMenus.SATELLITE_PIPE.get(), SatellitePipeScreen::new);

@@ -106,6 +106,25 @@ class CraftJobPolicyTest {
     }
 
     @Test
+    @DisplayName("extract batch waits for output slot cap, but never past what runs remain")
+    void extractBatchRunsWaitsForCapOrFlushesEarly() {
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(0, 100, 64, true),
+                "nothing ready yet");
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 100, 64, true),
+                "keep accumulating while more is still coming and cap not reached");
+        assertEquals(64, CraftJobPolicy.extractBatchRuns(64, 100, 64, true),
+                "flush once the output slot's cap is reached");
+        assertEquals(20, CraftJobPolicy.extractBatchRuns(20, 20, 64, true),
+                "flush once every remaining run has been produced, even under cap");
+        assertEquals(5, CraftJobPolicy.extractBatchRuns(5, 100, 64, false),
+                "input buffer ran dry before the cap: flush what is ready instead of stalling");
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 0, 64, true),
+                "nothing left on the job");
+        assertEquals(1, CraftJobPolicy.extractBatchRuns(1, 100, 1, true),
+                "non-stackable result caps at one run, same as today's one-at-a-time behaviour");
+    }
+
+    @Test
     @DisplayName("after buffer consume + armed + output ready, gather does not re-pull")
     void armedOutputReadyDoesNotPull() {
         GatherDecision decision = CraftJobPolicy.onGatherTick(true, false, true, false);

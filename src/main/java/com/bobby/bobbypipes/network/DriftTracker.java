@@ -27,11 +27,13 @@ import java.util.Optional;
  * plain pipe serve as a general tube any mod can feed, rather than only as fabric for the
  * routed network.
  *
- * <p>Three things end a drift, and none of them destroy the item:
+ * <p>Things that end a drift (none destroy the item):
  * <ul>
- *   <li>reaching a routed pipe that is on a network and has somewhere to send it, where it
- *       joins the logistics network. A routed pipe that is alone, or has nowhere to send
- *       it, is not a stop: the item drifts on through it like any other pipe</li>
+ *   <li>reaching a routed pipe that is on a network and has a sink or default route, where
+ *       it joins the logistics network</li>
+ *   <li>reaching a networked routed pipe with no sink/default for that item, ejected at
+ *       that pipe rather than random-walking onward</li>
+ *   <li>a lone routed pipe (not on a network) is not a stop; the item drifts through it</li>
  *   <li>turning into a container, where it is inserted</li>
  *   <li>running out of pipe, where it is put into an adjacent container or dropped</li>
  * </ul>
@@ -41,8 +43,19 @@ import java.util.Optional;
  */
 public final class DriftTracker {
 
-    /** Ticks an item spends crossing one plain pipe. */
-    private static final int TICKS_PER_HOP = 8;
+    /**
+     * Unrouted drift speed as a fraction of routed pipe hop speed.
+     *
+     * <p>Applied on the server hop clock and on the client lerp so both stay in sync.
+     * Routed parcels keep the full baseline rate.
+     */
+    public static final float SPEED_FACTOR = 0.40f;
+
+    /** Routed baseline (must match {@code PipeNetwork}'s parcel hop length). */
+    private static final int ROUTED_TICKS_PER_HOP = 8;
+
+    /** Ticks per unrouted hop, longer than routed so drift actually moves at {@link #SPEED_FACTOR}. */
+    private static final int TICKS_PER_HOP = Math.round(ROUTED_TICKS_PER_HOP / SPEED_FACTOR);
 
     /**
      * Hard cap on how far one item may wander.
@@ -54,24 +67,37 @@ public final class DriftTracker {
     private static final int MAX_HOPS = 512;
 
     /**
-     * Ticks an item spends running down the stub of arm into a container.
+     * Ticks an item spends running down the arm into a container.
      *
-     * <p>Shorter than a full hop because the arm is shorter than the gap between two pipe
-     * centres. Matching the tick count to the distance is what keeps the item moving at one
-     * steady speed instead of crawling into the container.
+     * <p>Matches {@link #TICKS_PER_HOP}: the drawn arm tip is one block from the pipe
+     * centre (inventory centre), same distance as a centre-to-centre pipe leg.
      */
-    private static final int ARM_TICKS = 4;
+    private static final int ARM_TICKS = TICKS_PER_HOP;
+
+    /**
+     * Extra distance a hop covers when it is pushed in from a real container (a hopper
+     * feeding a pipe) rather than picked up from another pipe  -  must match
+     * {@code PipeNetwork.ARM_OFFSET_BLOCKS} / {@code ParcelDebugRenderer.ARM_OFFSET}, which
+     * is what actually draws that entry arm on the client.
+     */
+    private static final float ARM_OFFSET_BLOCKS = 1.0f;
 
     /**
      * One item in transit through plain pipe.
      *
-     * @param exitTo when set, the item is running down this arm into a container and its
-     *               journey ends when it gets there. {@code next} is null for that hop:
-     *               the item is not going to another pipe, it is leaving the network.
+     * @param exitTo      when set, the item is running down this arm into a container and
+     *                    its journey ends when it gets there. {@code next} is null for
+     *                    that hop: the item is not going to another pipe, it is leaving
+     *                    the network.
+     * @param ticksForHop how many ticks the current hop takes; set once when the hop
+     *                    begins, longer than {@link #TICKS_PER_HOP} only for the very
+     *                    first hop off a real container, to cover the entry arm the
+     *                    client renders for it  -  authoritative, so the client has
+     *                    nothing left to guess and fall out of sync with.
      */
     public record Drifting(long id, ItemResource item, int count,
                            BlockPos at, BlockPos next, Direction cameFrom,
-                           int ticksIntoHop, int hops, Direction exitTo) {
+                           int ticksIntoHop, int hops, Direction exitTo, int ticksForHop) {
 
         /** True while running down an arm into a container. */
         public boolean leaving() {
@@ -120,7 +146,7 @@ public final class DriftTracker {
             return;
         }
         long id = nextId++;
-        items.put(id, new Drifting(id, item, count, pos.immutable(), null, from, 0, 0, null));
+        items.put(id, new Drifting(id, item, count, pos.immutable(), null, from, 0, 0, null, TICKS_PER_HOP));
     }
 
     /** Advances every drifting item by one tick. */
@@ -139,7 +165,7 @@ public final class DriftTracker {
             if (current.leaving()) {
                 current = new Drifting(current.id(), current.item(), current.count(),
                         current.at(), null, current.cameFrom(),
-                        current.ticksIntoHop() + 1, current.hops(), current.exitTo());
+                        current.ticksIntoHop() + 1, current.hops(), current.exitTo(), ARM_TICKS);
                 if (current.ticksIntoHop() >= ARM_TICKS) {
                     deliverThroughArm(current);
                     finished.add(current.id());
@@ -159,13 +185,13 @@ public final class DriftTracker {
 
             current = new Drifting(current.id(), current.item(), current.count(),
                     current.at(), current.next(), current.cameFrom(),
-                    current.ticksIntoHop() + 1, current.hops(), current.exitTo());
+                    current.ticksIntoHop() + 1, current.hops(), current.exitTo(), current.ticksForHop());
 
-            if (current.ticksIntoHop() >= TICKS_PER_HOP) {
+            if (current.ticksIntoHop() >= current.ticksForHop()) {
                 BlockPos arrived = current.next();
                 Direction entered = directionBetween(arrived, current.at());
                 Drifting landed = new Drifting(current.id(), current.item(), current.count(),
-                        arrived, null, entered, 0, current.hops() + 1, null);
+                        arrived, null, entered, 0, current.hops() + 1, null, TICKS_PER_HOP);
                 Drifting after = arriveAt(landed, network);
                 if (after == null) {
                     finished.add(current.id());
@@ -209,20 +235,13 @@ public final class DriftTracker {
     /**
      * Offers a drifting item to the logistics network at a routed pipe.
      *
-     * <p>A routed pipe is the boundary between the dumb and the planned transport, but only
-     * for an item it can actually place. A routed pipe with nowhere to send this item is
-     * not a wall: the item keeps drifting through it exactly as it would through plain
-     * pipe. That is the Logistics Pipes split, where an item carrying a destination it
-     * cannot currently reach is buffered and retried, while an item with no destination at
-     * all simply takes a random side onward. A drifting item is the second kind, so holding
-     * it here was applying the wrong half of that rule: it stopped dead at the pipe and was
-     * then put down wherever it happened to be standing.
+     * <p>Only pipes that are actually on a routed network (green arms) capture drifts. A
+     * lone router lets the item walk through. On a network, a sink or default route takes
+     * the item; if none will accept it, it is ejected here instead of random-walking into
+     * more pipe.
      *
-     * <p>Drifting on is its own retry. The item is offered again at every routed pipe it
-     * meets, including this one if it wanders back, so a network that is momentarily full
-     * or still rebuilding still gets its chances without the item sitting still for them.
-     *
-     * @return null once the network has taken it all, otherwise what is left to drift
+     * @return null once the network has taken it or it has been ejected; otherwise what is
+     *         left to drift (lone router, or a sink that took nothing / only part)
      */
     private Drifting offerToNetwork(Drifting drifting, PipeNetwork network) {
         BlockPos at = drifting.at();
@@ -232,7 +251,9 @@ public final class DriftTracker {
         Optional<SinkFinder.Sink> found =
                 SinkFinder.nearest(level, network, at, drifting.item(), drifting.count());
         if (found.isEmpty()) {
-            return drifting;
+            // Networked, but no sink/default for this item, spit it out here.
+            eject(drifting);
+            return null;
         }
         SinkFinder.Sink sink = found.get();
 
@@ -246,11 +267,13 @@ public final class DriftTracker {
             return null;
         }
         if (sent <= 0) {
+            // Sink existed but took nothing (momentarily full). Keep drifting and retry
+            // at the next networked router rather than dropping on a full chest.
             return drifting;
         }
         // Partially accepted: the rest carries on drifting.
         return new Drifting(drifting.id(), drifting.item(), drifting.count() - sent,
-                at, null, drifting.cameFrom(), 0, drifting.hops(), null);
+                at, null, drifting.cameFrom(), 0, drifting.hops(), null, TICKS_PER_HOP);
     }
 
     /**
@@ -281,17 +304,39 @@ public final class DriftTracker {
                 // insert happens when the item gets there, the same way a routed parcel
                 // is animated into its destination.
                 return new Drifting(drifting.id(), drifting.item(), drifting.count(),
-                        at, null, drifting.cameFrom(), 0, drifting.hops(), chosen.side());
+                        at, null, drifting.cameFrom(), 0, drifting.hops(), chosen.side(), ARM_TICKS);
             }
             case DUMB_PIPE, SMART_PIPE -> {
                 return new Drifting(drifting.id(), drifting.item(), drifting.count(),
-                        at, target, drifting.cameFrom(), 0, drifting.hops(), null);
+                        at, target, drifting.cameFrom(), 0, drifting.hops(), null,
+                        hopTicksFor(drifting, at));
             }
             default -> {
                 eject(drifting);
                 return null;
             }
         }
+    }
+
+    /**
+     * Hop length for a pipe-to-pipe hop starting at {@code at}.
+     *
+     * <p>Longer only for the very first hop of a fresh item whose {@code cameFrom} side is
+     * a real container rather than more pipe  -  the same condition {@code PipeNetwork}
+     * uses to decide whether to draw an entry arm, kept in lockstep with it so the extra
+     * time always matches the extra distance actually rendered.
+     */
+    private int hopTicksFor(Drifting drifting, BlockPos at) {
+        boolean pushedInFirstHop = drifting.hops() == 0
+                && drifting.cameFrom() != null
+                && !isPipe(at.relative(drifting.cameFrom()));
+        return pushedInFirstHop
+                ? Math.round(TICKS_PER_HOP * (1.0f + ARM_OFFSET_BLOCKS))
+                : TICKS_PER_HOP;
+    }
+
+    private boolean isPipe(BlockPos pos) {
+        return level.hasChunkAt(pos) && level.getBlockState(pos).getBlock() instanceof PipeBlock;
     }
 
     /**

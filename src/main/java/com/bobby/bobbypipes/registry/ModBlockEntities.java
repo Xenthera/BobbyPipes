@@ -6,6 +6,7 @@ import com.bobby.bobbypipes.block.entity.BasicPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PassiveSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
+import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SatellitePipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SupplierPipeBlockEntity;
 import net.minecraft.core.registries.Registries;
@@ -24,6 +25,10 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BasicPipeBlockEntity>> BASIC_PIPE =
             BLOCK_ENTITIES.register("basic_pipe", () -> new BlockEntityType<>(
                     BasicPipeBlockEntity::new, Set.of(ModBlocks.BASIC_PIPE.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProviderPipeBlockEntity>> PROVIDER_PIPE =
+            BLOCK_ENTITIES.register("provider_pipe", () -> new BlockEntityType<>(
+                    ProviderPipeBlockEntity::new, Set.of(ModBlocks.PROVIDER_PIPE.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PatternTableBlockEntity>> PATTERN_TABLE =
             BLOCK_ENTITIES.register("pattern_table", () -> new BlockEntityType<>(

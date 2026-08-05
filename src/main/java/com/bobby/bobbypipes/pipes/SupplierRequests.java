@@ -11,7 +11,9 @@ import java.util.List;
 
 /**
  * Ghost slots for a Supplier pipe: each non-empty stack is an item to keep stocked, and
- * its count is the target amount in the attached inventory.
+ * its count contributes to the target amount in the attached inventory.
+ *
+ * <p>Identical items across slots sum (two stacks of 64 logs → keep 128).
  */
 public record SupplierRequests(List<ItemStack> slots) {
 

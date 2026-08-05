@@ -3,6 +3,7 @@ package com.bobby.bobbypipes.menu;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import com.bobby.bobbypipes.registry.ModMenus;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
@@ -31,7 +32,8 @@ public class PatternTableMenu extends AbstractContainerMenu {
         this.output = table.output();
         addTableSlots();
         // +1,+1 matches painted wells on our GUI texture (item sits in the inner 16x16).
-        addStandardInventorySlots(inventory, 9, 141);
+        addStandardInventorySlots(
+                inventory, GuiLayout.playerInventoryOriginX(), 151 + GuiLayout.CONTENT_TOP_PAD);
     }
 
     public PatternTableMenu(int id, Inventory inventory, RegistryFriendlyByteBuf buf) {
@@ -41,21 +43,21 @@ public class PatternTableMenu extends AbstractContainerMenu {
         this.resources = new ItemStacksResourceHandler(PatternTableBlockEntity.RESOURCE_SLOTS);
         this.output = new ItemStacksResourceHandler(PatternTableBlockEntity.OUTPUT_SLOTS);
         addTableSlots();
-        addStandardInventorySlots(inventory, 9, 141);
+        addStandardInventorySlots(
+                inventory, GuiLayout.playerInventoryOriginX(), 151 + GuiLayout.CONTENT_TOP_PAD);
     }
 
     private void addTableSlots() {
+        int pad = GuiLayout.CONTENT_TOP_PAD;
         for (int row = 0; row < 2; row++) {
             for (int col = 0; col < 9; col++) {
                 int index = row * 9 + col;
                 addSlot(new ResourceHandlerSlot(
                         resources, resources::set, index,
-                        9 + col * 18, 91 + row * 18));
+                        GuiLayout.contentSlotOriginX() + col * 18, 91 + pad + row * 18));
             }
         }
-        // Crafted output only  -  players may take, not insert.
-        // +1,+1 matches painted wells on our GUI texture (item sits in the inner 16x16).
-        addSlot(new ResourceHandlerSlot(output, output::set, 0, 125, 36) {
+        addSlot(new ResourceHandlerSlot(output, output::set, 0, 125, 36 + pad) {
             @Override
             public boolean mayPlace(ItemStack stack) {
                 return false;

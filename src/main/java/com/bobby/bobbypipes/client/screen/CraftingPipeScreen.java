@@ -5,11 +5,15 @@ import com.bobby.bobbypipes.menu.CraftingPipeMenu;
 import com.bobby.bobbypipes.network.payload.ImportCraftPatternPayload;
 import com.bobby.bobbypipes.network.payload.RequestSatelliteListPayload;
 import com.bobby.bobbypipes.network.payload.SetCraftPatternPayload;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.draw.UiDraw;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
+import com.bobby.bobbycore.client.gui.widget.UiButton;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -17,13 +21,12 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * LP-style crafting pipe: row of 9 ingredient ghosts, result, import, one satellite.
  */
-public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu> {
-
-    private static final int GHOST_OVERLAY = 0x60_FF_FF_FF;
+public class CraftingPipeScreen extends ThemedContainerScreen<CraftingPipeMenu> {
 
     /**
      * Button row, sat directly under the result slot.
@@ -33,28 +36,39 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
      */
     private static final int BUTTON_Y = CraftingPipeLayout.RESULT_Y + CraftingPipeLayout.SLOT + 1;
     private static final int BUTTON_HEIGHT = 14;
+    private static final int INV_SLOT_Y = 100 + GuiLayout.CONTENT_TOP_PAD;
 
     private List<String> satelliteNames = List.of();
     private int listIndex;
     private boolean listOpen;
+    private ItemStack headerIcon = ItemStack.EMPTY;
 
     public CraftingPipeScreen(CraftingPipeMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, 166);
-        this.inventoryLabelY = 74;
+        super(menu, inventory, title, GuiLayout.STANDARD_PANEL_WIDTH, 181 + PipeGui.CONTENT_PAD);
+        this.inventoryLabelX = GuiLayout.playerInventoryLabelX(GuiLayout.STANDARD_PANEL_WIDTH);
+        this.inventoryLabelY = GuiLayout.playerInventoryLabelY(INV_SLOT_Y);
+        setHelpTooltip(Component.translatable("gui.bobbypipes.help.crafting_pipe"));
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return PipeThemes.CRAFTING;
     }
 
     @Override
     protected void init() {
         super.init();
-        this.titleLabelX = 8;
-        addRenderableWidget(Button.builder(
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = PipeThemes.CRAFTING.titlePadY();
+        addRenderableWidget(UiButton.builder(
                         Component.translatable("gui.bobbypipes.crafting.import"),
                         b -> ClientPacketDistributor.sendToServer(new ImportCraftPatternPayload(menu.pos())))
                 .bounds(leftPos + 8, topPos + BUTTON_Y, 50, BUTTON_HEIGHT)
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(
                         Component.translatable("gui.bobbypipes.crafting.import.tip")))
                 .build());
-        addRenderableWidget(Button.builder(
+        addRenderableWidget(UiButton.builder(
                         Component.translatable("gui.bobbypipes.crafting.satellite_select"),
                         b -> {
                             listOpen = !listOpen;
@@ -67,7 +81,7 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(
                         Component.translatable("gui.bobbypipes.crafting.satellite_select.tip")))
                 .build());
-        addRenderableWidget(Button.builder(
+        addRenderableWidget(UiButton.builder(
                         Component.translatable("gui.bobbypipes.crafting.satellite_unset"),
                         b -> {
                             listOpen = false;
@@ -97,35 +111,36 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                ModGuiTextures.CRAFTING_PIPE,
-                leftPos,
-                topPos,
-                0.0F,
-                0.0F,
-                imageWidth,
-                imageHeight,
-                256,
-                256);
+        PipeGui.drawPanelAndMenuSlots(
+                graphics, PipeThemes.CRAFTING, leftPos, topPos, imageWidth, imageHeight,
+                GuiLayout.playerInventoryBandY(INV_SLOT_Y), menu.slots);
+        PipeGui.drawSlotRow(
+                graphics,
+                PipeThemes.CRAFTING,
+                leftPos + CraftingPipeLayout.slotX(0),
+                topPos + CraftingPipeLayout.slotY(),
+                9,
+                CraftingPipeLayout.SLOT);
+        PipeGui.drawSlotFrame(graphics, PipeThemes.CRAFTING,
+                leftPos + CraftingPipeLayout.RESULT_X, topPos + CraftingPipeLayout.RESULT_Y);
     }
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         // Drawn here rather than via super, which hardcodes vanilla's dark grey.
-        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
-        graphics.text(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY,
+        ScreenHeader.draw(graphics, font, PipeThemes.CRAFTING, title, headerIcon, PanelStyle.LABEL);
+        graphics.text(font, BobbyFonts.apply(playerInventoryTitle), inventoryLabelX, inventoryLabelY,
                 PanelStyle.LABEL, false);
         String sat = menu.pattern().satellite();
-        Component line = sat.isBlank()
+        Component line = BobbyFonts.apply(sat.isBlank()
                 ? Component.translatable("gui.bobbypipes.crafting.satellite_none")
-                : Component.translatable("gui.bobbypipes.crafting.satellite_current", sat);
+                : Component.translatable("gui.bobbypipes.crafting.satellite_current", sat));
         // Green only once this is actually routing somewhere. No satellite reads the same
         // as a satellite that has gone missing, because neither will deliver anywhere.
         boolean routing = !sat.isBlank()
                 && (satelliteNames.isEmpty() || satelliteNames.contains(sat));
         // extractLabels is already translated to leftPos/topPos.
-        graphics.text(font, line, 8, 46, routing ? PanelStyle.MARKER_GREEN : PanelStyle.MARKER_RED, false);
+        graphics.text(font, line, 8, 46 + PipeGui.CONTENT_PAD, routing ? PanelStyle.MARKER_GREEN : PanelStyle.MARKER_RED, false);
     }
 
     @Override
@@ -134,30 +149,14 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
         CraftPattern pattern = menu.pattern();
         if (pattern.hasInputs() || !pattern.primaryOutput().isEmpty()) {
             CraftingPipeLayout.drawGhosts(graphics, font, leftPos, topPos, pattern);
-            // Fade ghosts so they read as programming, not real items.
-            for (int i = 0; i < 9; i++) {
-                if (i < pattern.inputs().size() && !pattern.inputs().get(i).isEmpty()) {
-                    int x = leftPos + CraftingPipeLayout.slotX(i) + 1;
-                    int y = topPos + CraftingPipeLayout.slotY() + 1;
-                    graphics.fill(x, y, x + 16, y + 16, GHOST_OVERLAY);
-                }
-            }
-            if (!pattern.primaryOutput().isEmpty()) {
-                int x = leftPos + CraftingPipeLayout.RESULT_X + 1;
-                int y = topPos + CraftingPipeLayout.RESULT_Y + 1;
-                graphics.fill(x, y, x + 16, y + 16, GHOST_OVERLAY);
-            }
-            if (pattern.hasSatellite()) {
-                for (int slot = CraftPattern.SATELLITE_SLOT_START; slot < CraftPattern.SATELLITE_SLOT_END; slot++) {
-                    int x = leftPos + CraftingPipeLayout.slotX(slot);
-                    int y = topPos + CraftingPipeLayout.slotY();
-                    graphics.fill(x, y, x + CraftingPipeLayout.SLOT, y + 1, 0xFF_3A_8A_FF);
-                    graphics.fill(x, y + CraftingPipeLayout.SLOT - 1,
-                            x + CraftingPipeLayout.SLOT, y + CraftingPipeLayout.SLOT, 0xFF_3A_8A_FF);
-                    graphics.fill(x, y, x + 1, y + CraftingPipeLayout.SLOT, 0xFF_3A_8A_FF);
-                    graphics.fill(x + CraftingPipeLayout.SLOT - 1, y,
-                            x + CraftingPipeLayout.SLOT, y + CraftingPipeLayout.SLOT, 0xFF_3A_8A_FF);
-                }
+        }
+        // Satellite column stays highlighted whenever a satellite is selected.
+        if (pattern.hasSatellite()) {
+            for (int slot = CraftPattern.SATELLITE_SLOT_START; slot < CraftPattern.SATELLITE_SLOT_END; slot++) {
+                int x = leftPos + CraftingPipeLayout.slotX(slot);
+                int y = topPos + CraftingPipeLayout.slotY();
+                UiDraw.border(graphics, x, y, CraftingPipeLayout.SLOT, CraftingPipeLayout.SLOT,
+                        PipeThemes.CRAFTING.accent(), 1);
             }
         }
         if (listOpen && !satelliteNames.isEmpty()) {
@@ -171,7 +170,8 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
         int w = 106;
         int rowH = 12;
         int visible = Math.min(4, satelliteNames.size());
-        graphics.fill(x - 2, y - 2, x + w + 2, y + visible * rowH + 2, 0xFF_20_20_20);
+        UiDraw.fill(graphics, x - 2, y - 2, w + 4, visible * rowH + 4, PipeThemes.CRAFTING.panelInset());
+        UiDraw.border(graphics, PipeThemes.CRAFTING, x - 2, y - 2, w + 4, visible * rowH + 4);
         for (int i = 0; i < visible; i++) {
             int idx = listIndex + i;
             if (idx >= satelliteNames.size()) {
@@ -180,9 +180,9 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
             int rowY = y + i * rowH;
             boolean hover = mouseX >= x && mouseX < x + w && mouseY >= rowY && mouseY < rowY + rowH;
             if (hover) {
-                graphics.fill(x, rowY, x + w, rowY + rowH, 0xFF_3A_5A_8A);
+                UiDraw.fill(graphics, x, rowY, w, rowH, PipeThemes.CRAFTING.buttonFillHover());
             }
-            graphics.text(font, Component.literal(satelliteNames.get(idx)), x + 2, rowY + 2, 0xFF_FF_FF_FF, false);
+            graphics.text(font, Component.literal(satelliteNames.get(idx)), x + 2, rowY + 2, PanelStyle.LABEL, false);
         }
     }
 
@@ -226,6 +226,20 @@ public class CraftingPipeScreen extends AbstractContainerScreen<CraftingPipeMenu
             return true;
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    protected void extractTooltip(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        super.extractTooltip(graphics, mouseX, mouseY);
+        if (listOpen) {
+            return;
+        }
+        ItemStack ghost = CraftingPipeLayout.ghostAt(menu.pattern(), mouseX, mouseY, leftPos, topPos);
+        if (ghost.isEmpty()) {
+            return;
+        }
+        graphics.setTooltipForNextFrame(
+                font, List.of(ghost.getHoverName()), Optional.empty(), ghost, mouseX, mouseY);
     }
 
     @Override

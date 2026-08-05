@@ -2,13 +2,22 @@ package com.bobby.bobbypipes.client.screen;
 
 import com.bobby.bobbypipes.client.ClientCraftMonitor;
 import com.bobby.bobbypipes.menu.AutocraftMonitorMenu;
+import com.bobby.bobbypipes.network.payload.CancelCraftJobPayload;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.scroll.ScrollController;
+import com.bobby.bobbycore.client.gui.scroll.ScrollModel;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
+import com.bobby.bobbycore.client.gui.widget.Panel;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,21 +25,27 @@ import java.util.Optional;
 
 /**
  * Scrollable card list of pending autocraft jobs and recent failures.
+ * Uses BobbyCore {@link ScrollController} with one scroll unit per card.
  */
-public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMonitorMenu> {
+public class AutocraftMonitorScreen extends ThemedContainerScreen<AutocraftMonitorMenu> {
 
     private static final int PANEL_W = 220;
-    private static final int PANEL_H = 200;
-    private static final int LIST_X = 8;
-    private static final int LIST_Y = 18;
+    private static final int PANEL_H = 200 + GuiLayout.CONTENT_TOP_PAD;
+    private static final int LIST_X = GuiLayout.contentSlotOriginX();
+    private static final int LIST_Y = GuiLayout.slottedContentTop();
     private static final int LIST_W = 190;
     private static final int LIST_H = 172;
     private static final int CARD_H = 44;
     private static final int CARD_GAP = 4;
+    private static final int CARD_STRIDE = CARD_H + CARD_GAP;
     private static final int SCROLL_W = 6;
+    /** How many full card strides fit in the list viewport. */
+    private static final int VISIBLE_CARDS = Math.max(1, (LIST_H + CARD_GAP) / CARD_STRIDE);
 
-    private double scrollOff;
+    private final ScrollModel scrollModel = new ScrollModel(VISIBLE_CARDS, 1);
+    private final ScrollController scrollController = new ScrollController(scrollModel).setTheme(PipeThemes.AUTOCRAFT_MONITOR);
     private CraftMonitorPayload.Card hoveredCard;
+    private ItemStack headerIcon = ItemStack.EMPTY;
     /**
      * Cancel boxes from the last frame, rebuilt every render.
      *
@@ -47,29 +62,45 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
         }
     }
 
-    @Override
-    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event,
-                               boolean doubleClick) {
-        for (CancelHit hit : cancelHits) {
-            if (hit.covers(event.x(), event.y())) {
-                net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(
-                        new com.bobby.bobbypipes.network.payload.CancelCraftJobPayload(hit.jobId()));
-                return true;
-            }
-        }
-        return super.mouseClicked(event, doubleClick);
-    }
-
     public AutocraftMonitorScreen(AutocraftMonitorMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title, PANEL_W, PANEL_H);
         this.inventoryLabelY = 1000;
-        this.titleLabelY = 6;
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = PipeThemes.AUTOCRAFT_MONITOR.titlePadY();
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return PipeThemes.AUTOCRAFT_MONITOR;
     }
 
     @Override
     protected void init() {
         super.init();
-        scrollOff = 0;
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
+        scrollModel.setScrollRows(0);
+        layoutScrollTrack();
+    }
+
+    private void layoutScrollTrack() {
+        scrollController.setTrackBounds(
+                leftPos + LIST_X + LIST_W + 2,
+                topPos + LIST_Y,
+                SCROLL_W,
+                LIST_H);
+    }
+
+    private void syncScrollModel(int cardCount) {
+        scrollModel.setVisibleRows(VISIBLE_CARDS);
+        scrollModel.setTotalRows(Math.max(1, cardCount));
+        layoutScrollTrack();
+    }
+
+    private boolean isOverList(double mouseX, double mouseY) {
+        return mouseX >= leftPos + LIST_X
+                && mouseX < leftPos + LIST_X + LIST_W + SCROLL_W + 2
+                && mouseY >= topPos + LIST_Y
+                && mouseY < topPos + LIST_Y + LIST_H;
     }
 
     @Override
@@ -81,17 +112,14 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        int x = leftPos;
-        int y = topPos;
-        graphics.fill(x, y, x + PANEL_W, y + PANEL_H, 0xFF_2A_2A_2E);
-        graphics.fill(x + 1, y + 1, x + PANEL_W - 1, y + PANEL_H - 1, 0xFF_3A_3A_40);
-        graphics.fill(x + LIST_X - 2, y + LIST_Y - 2,
-                x + LIST_X + LIST_W + SCROLL_W + 4, y + LIST_Y + LIST_H + 2, 0xFF_1E_1E_22);
+        Panel.draw(graphics, PipeThemes.AUTOCRAFT_MONITOR, leftPos, topPos, PANEL_W, PANEL_H);
+        PipeGui.drawContentPaneBorder(
+                graphics, PipeThemes.AUTOCRAFT_MONITOR, leftPos, topPos, PANEL_W, PANEL_H, -1);
     }
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        graphics.text(font, title, titleLabelX, titleLabelY, 0xFF_E0_E0_E0, false);
+        ScreenHeader.draw(graphics, font, PipeThemes.AUTOCRAFT_MONITOR, title, headerIcon, PanelStyle.LABEL);
     }
 
     @Override
@@ -118,29 +146,23 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
             return;
         }
 
-        int contentH = cards.size() * (CARD_H + CARD_GAP) - CARD_GAP;
-        int maxScroll = Math.max(0, contentH - LIST_H);
-        scrollOff = Mth.clamp(scrollOff, 0, maxScroll);
+        syncScrollModel(cards.size());
+        int scrollRows = scrollModel.scrollRows();
+        int scrollOff = scrollRows * CARD_STRIDE;
 
         graphics.enableScissor(leftPos + LIST_X, topPos + LIST_Y,
                 leftPos + LIST_X + LIST_W, topPos + LIST_Y + LIST_H);
-        int drawY = topPos + LIST_Y - (int) scrollOff;
+        int drawY = topPos + LIST_Y - scrollOff;
         for (CraftMonitorPayload.Card card : cards) {
             if (drawY + CARD_H >= topPos + LIST_Y && drawY <= topPos + LIST_Y + LIST_H) {
                 renderCard(graphics, leftPos + LIST_X, drawY, card, mouseX, mouseY);
             }
-            drawY += CARD_H + CARD_GAP;
+            drawY += CARD_STRIDE;
         }
         graphics.disableScissor();
 
-        if (maxScroll > 0) {
-            int trackX = leftPos + LIST_X + LIST_W + 2;
-            int trackY = topPos + LIST_Y;
-            graphics.fill(trackX, trackY, trackX + SCROLL_W, trackY + LIST_H, 0xFF_10_10_14);
-            int thumbH = Math.max(12, LIST_H * LIST_H / contentH);
-            int thumbY = trackY + (int) ((LIST_H - thumbH) * (scrollOff / maxScroll));
-            graphics.fill(trackX, thumbY, trackX + SCROLL_W, thumbY + thumbH, 0xFF_88_88_90);
-        }
+        layoutScrollTrack();
+        scrollController.draw(graphics, mouseX, mouseY);
     }
 
     @Override
@@ -196,8 +218,6 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
             graphics.text(font, "x" + card.runsRemaining(), x + 80, y + 4, 0xFF_DD_DD_88, false);
         }
 
-        // Jobs no longer expire on a timer, so there is no countdown to show. A stuck
-        // job is cleared with the cancel control instead.
         if (card.jobId() != 0L) {
             int cancelX = x + LIST_W - 18;
             boolean over = mouseX >= cancelX && mouseX < cancelX + 12
@@ -241,27 +261,6 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
         };
     }
 
-    private static void drawBar(GuiGraphicsExtractor graphics,
-                                int x, int y, int w, int h,
-                                int left, int max, int fill) {
-        graphics.fill(x, y, x + w, y + h, 0xFF_15_15_18);
-        if (max <= 0) {
-            return;
-        }
-        int filled = Mth.clamp(w * left / max, 0, w);
-        if (filled > 0) {
-            graphics.fill(x, y, x + filled, y + h, fill);
-        }
-    }
-
-    private static String formatTicks(int ticks) {
-        int sec = Math.max(0, ticks) / 20;
-        if (sec >= 60) {
-            return (sec / 60) + "m" + (sec % 60) + "s";
-        }
-        return sec + "s";
-    }
-
     private static String truncate(String text, int max) {
         if (text == null) {
             return "";
@@ -270,12 +269,40 @@ public class AutocraftMonitorScreen extends AbstractContainerScreen<AutocraftMon
     }
 
     @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        layoutScrollTrack();
+        syncScrollModel(ClientCraftMonitor.cards().size());
+        if (scrollController.mouseClicked(event)) {
+            return true;
+        }
+        for (CancelHit hit : cancelHits) {
+            if (hit.covers(event.x(), event.y())) {
+                ClientPacketDistributor.sendToServer(new CancelCraftJobPayload(hit.jobId()));
+                return true;
+            }
+        }
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (scrollController.mouseDragged(event)) {
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        scrollController.mouseReleased(event);
+        return super.mouseReleased(event);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (mouseX >= leftPos + LIST_X && mouseX < leftPos + LIST_X + LIST_W + SCROLL_W
-                && mouseY >= topPos + LIST_Y && mouseY < topPos + LIST_Y + LIST_H) {
-            int contentH = ClientCraftMonitor.cards().size() * (CARD_H + CARD_GAP) - CARD_GAP;
-            int maxScroll = Math.max(0, contentH - LIST_H);
-            scrollOff = Mth.clamp(scrollOff - scrollY * 12, 0, maxScroll);
+        syncScrollModel(ClientCraftMonitor.cards().size());
+        layoutScrollTrack();
+        if (scrollController.mouseScrolled(mouseX, mouseY, scrollY, isOverList(mouseX, mouseY))) {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);

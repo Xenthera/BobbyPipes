@@ -3,6 +3,7 @@ package com.bobby.bobbypipes.menu;
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import com.bobby.bobbypipes.registry.ModMenus;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
@@ -19,14 +20,14 @@ public class CraftingPipeMenu extends AbstractContainerMenu {
         super(ModMenus.CRAFTING_PIPE.get(), id);
         this.pos = pipe.getBlockPos().immutable();
         this.pattern = pipe.pattern();
-        addStandardInventorySlots(inventory, 9, 85);
+        addStandardInventorySlots(inventory, GuiLayout.playerInventoryOriginX(), 100 + GuiLayout.CONTENT_TOP_PAD);
     }
 
     public CraftingPipeMenu(int id, Inventory inventory, RegistryFriendlyByteBuf buf) {
         super(ModMenus.CRAFTING_PIPE.get(), id);
         this.pos = buf.readBlockPos();
         this.pattern = CraftPattern.STREAM_CODEC.decode(buf);
-        addStandardInventorySlots(inventory, 9, 85);
+        addStandardInventorySlots(inventory, GuiLayout.playerInventoryOriginX(), 100 + GuiLayout.CONTENT_TOP_PAD);
     }
 
     public BlockPos pos() {

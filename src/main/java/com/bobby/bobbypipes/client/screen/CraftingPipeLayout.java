@@ -1,5 +1,6 @@
 package com.bobby.bobbypipes.client.screen;
 
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -12,10 +13,11 @@ import java.util.OptionalInt;
  */
 public final class CraftingPipeLayout {
 
-    public static final int ROW_X = 8;
-    public static final int ROW_Y = 20;
+    /** Frame origin; items sit at {@code ROW_X + 1}, matching the player-inventory column. */
+    public static final int ROW_X = GuiLayout.contentRowFrameX();
+    public static final int ROW_Y = 20 + GuiLayout.CONTENT_TOP_PAD;
     public static final int RESULT_X = 80;
-    public static final int RESULT_Y = 40;
+    public static final int RESULT_Y = 40 + GuiLayout.CONTENT_TOP_PAD;
     public static final int SLOT = 18;
 
     private CraftingPipeLayout() {
@@ -50,22 +52,33 @@ public final class CraftingPipeLayout {
         for (int i = 0; i < 9; i++) {
             ItemStack stack = i < pattern.inputs().size() ? pattern.inputs().get(i) : ItemStack.EMPTY;
             if (!stack.isEmpty()) {
-                int x = leftPos + slotX(i) + 1;
-                int y = topPos + slotY() + 1;
-                graphics.item(stack, x, y);
-                if (stack.getCount() > 1) {
-                    graphics.itemDecorations(font, stack, x, y);
-                }
+                GhostCraftingLayout.drawGhostItem(
+                        graphics, font, leftPos + slotX(i) + 1, topPos + slotY() + 1,
+                        stack, PipeThemes.CRAFTING);
             }
         }
         ItemStack result = pattern.primaryOutput();
         if (!result.isEmpty()) {
-            int x = leftPos + RESULT_X + 1;
-            int y = topPos + RESULT_Y + 1;
-            graphics.item(result, x, y);
-            if (result.getCount() > 1) {
-                graphics.itemDecorations(font, result, x, y);
-            }
+            GhostCraftingLayout.drawGhostItem(
+                    graphics, font, leftPos + RESULT_X + 1, topPos + RESULT_Y + 1,
+                    result, PipeThemes.CRAFTING);
         }
+    }
+
+    /** Ghost stack under the cursor, if any. */
+    public static ItemStack ghostAt(CraftPattern pattern, double mouseX, double mouseY,
+                                    int leftPos, int topPos) {
+        var hit = hitTest(mouseX, mouseY, leftPos, topPos);
+        if (hit.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        int index = hit.getAsInt();
+        if (index == GhostCraftingLayout.RESULT_INDEX) {
+            return pattern.primaryOutput();
+        }
+        if (index < 0 || index >= pattern.inputs().size()) {
+            return ItemStack.EMPTY;
+        }
+        return pattern.inputs().get(index);
     }
 }

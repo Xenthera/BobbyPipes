@@ -5,13 +5,17 @@ import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
 import com.bobby.bobbypipes.network.payload.RequestItemPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
+import com.bobby.bobbycore.client.gui.widget.Panel;
+import com.bobby.bobbycore.client.gui.widget.UiButton;
+import com.bobby.bobbycore.client.gui.widget.UiTextBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -27,13 +31,20 @@ import java.util.Optional;
 /**
  * Browse network stock + craftables and submit a request.
  *
- * <p>Layout mirrors Refined Storage's Grid: search, 9-wide scrollable item grid with
- * creative-style scrollbar, quantity + request controls.
+ * <p>Layout: header -> search toolbar (search + sort/group) -> scrollable grid -> qty + request -> status.
  */
-public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
+public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
-    private static final int GRID_X = 8;
-    private static final int GRID_Y = 35;
+    private static final int CONTENT_X = GuiLayout.contentSlotOriginX();
+    private static final int TOOLBAR_H = 14;
+    private static final int TOOL_BTN_W = 22;
+    private static final int TOOL_GAP = 3;
+    private static final int GRID_GAP = 4;
+    private static final int ACTION_H = 16;
+    private static final int QTY_W = 40;
+    private static final int STATUS_GAP = 4;
+
+    private static final Component QTY_LABEL = BobbyFonts.literal("Qty:");
 
     /** How the grid is ordered. Cycled by the sort button. */
     private enum SortMode {
@@ -55,77 +66,139 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
 
     /** Non-null while the shortfall modal is up, which blocks the rest of the screen. */
     private List<RequestResultPayload.Shortfall> shortfallModal;
-    private Button modalClose;
+    private UiButton modalClose;
     /** Stops the modal reopening every tick while the same result is on screen. */
     private boolean shortfallShown;
     private SortMode sortMode = SortMode.NAME_ASC;
     private boolean groupCraftable = true;
-    private Button sortButton;
-    private Button groupButton;
-    private EditBox search;
-    private EditBox quantity;
-    private Button requestButton;
+    private UiButton sortButton;
+    private UiButton groupButton;
+    private UiTextBox search;
+    private UiTextBox quantity;
+    private UiButton requestButton;
     private StockItemGrid grid;
     private ItemResource selected = ItemResource.EMPTY;
     private List<NetworkStockPayload.Entry> filtered = List.of();
+    private ItemStack headerIcon = ItemStack.EMPTY;
 
     public RequestScreen(RequestMenu menu, Inventory inventory, Component title) {
-        // Wider than a chest so the 9-col grid + creative scrollbar fit (same idea as RS Grid).
-        super(menu, inventory, title, 193, 210);
+        super(menu, inventory, title, panelWidth(), panelHeight());
         this.inventoryLabelY = 1000;
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = PipeThemes.REQUEST.titlePadY();
+        setHelpTooltip(Component.translatable("gui.bobbypipes.help.request_pipe"));
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return PipeThemes.REQUEST;
+    }
+
+    private static int panelWidth() {
+        // content pad + 9 slots + scrollbar + right pad
+        return CONTENT_X + StockItemGrid.COLUMNS * StockItemGrid.SLOT + 1 + StockItemGrid.SCROLLER_WIDTH + CONTENT_X;
+    }
+
+    private static int panelHeight() {
+        UiTheme theme = PipeThemes.REQUEST;
+        int toolbarY = toolbarY(theme);
+        int gridY = toolbarY + TOOLBAR_H + GRID_GAP;
+        int actionY = gridY + StockItemGrid.VISIBLE_ROWS * StockItemGrid.SLOT + GRID_GAP;
+        int statusY = actionY + ACTION_H + STATUS_GAP;
+        return statusY + 10 + GuiLayout.CONTENT_BOTTOM_PAD;
+    }
+
+    private static int toolbarY(UiTheme theme) {
+        return theme.headerHeight() + 3;
+    }
+
+    private int toolbarY() {
+        return toolbarY(PipeThemes.REQUEST);
+    }
+
+    private int gridY() {
+        return toolbarY() + TOOLBAR_H + GRID_GAP;
+    }
+
+    private int actionY() {
+        return gridY() + StockItemGrid.VISIBLE_ROWS * StockItemGrid.SLOT + GRID_GAP;
+    }
+
+    private int statusY() {
+        return actionY() + ACTION_H + STATUS_GAP;
     }
 
     @Override
     protected void init() {
         super.init();
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
         ClientRequestGui.clearResult();
-        grid = new StockItemGrid(leftPos + GRID_X, topPos + GRID_Y);
+        UiTheme theme = PipeThemes.REQUEST;
+        int ty = toolbarY();
+        int contentRight = leftPos + imageWidth - CONTENT_X;
+        int groupX = contentRight - TOOL_BTN_W;
+        int sortX = groupX - TOOL_GAP - TOOL_BTN_W;
+        int searchW = sortX - TOOL_GAP - (leftPos + CONTENT_X);
 
-        search = new EditBox(font, leftPos + 8, topPos + 18, 160, 12,
-                Component.translatable("gui.bobbypipes.request.search"));
-        search.setMaxLength(64);
-        search.setResponder(text -> {
-            grid.resetScroll();
-            rebuildFilter();
-        });
+        grid = new StockItemGrid(leftPos + CONTENT_X, topPos + gridY());
+
+        search = UiTextBox.builder(font, Component.translatable("gui.bobbypipes.request.search"))
+                .bounds(leftPos + CONTENT_X, topPos + ty, Math.max(40, searchW), TOOLBAR_H)
+                .theme(theme)
+                .maxLength(64)
+                .responder(text -> {
+                    grid.resetScroll();
+                    rebuildFilter();
+                })
+                .build();
         addRenderableWidget(search);
 
-        sortButton = Button.builder(Component.literal(sortMode.label), button -> {
+        sortButton = UiButton.builder(Component.literal(sortMode.label), button -> {
                     sortMode = sortMode.next();
-                    button.setMessage(Component.literal(sortMode.label));
+                    button.setMessage(BobbyFonts.literal(sortMode.label));
                     grid.resetScroll();
                     rebuildFilter();
                 })
-                .bounds(leftPos - 24, topPos + 18, 22, 18)
+                .bounds(sortX, topPos + ty, TOOL_BTN_W, TOOLBAR_H)
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(
                         Component.translatable("gui.bobbypipes.request.sort")))
-                .build();
+                .build()
+                .setTheme(theme);
         addRenderableWidget(sortButton);
 
-        groupButton = Button.builder(groupLabel(), button -> {
+        groupButton = UiButton.builder(groupLabel(), button -> {
                     groupCraftable = !groupCraftable;
-                    button.setMessage(groupLabel());
+                    button.setMessage(BobbyFonts.apply(groupLabel()));
                     grid.resetScroll();
                     rebuildFilter();
                 })
-                .bounds(leftPos - 24, topPos + 40, 22, 18)
+                .bounds(groupX, topPos + ty, TOOL_BTN_W, TOOLBAR_H)
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(
                         Component.translatable("gui.bobbypipes.request.group")))
-                .build();
+                .build()
+                .setTheme(theme);
         addRenderableWidget(groupButton);
 
-        quantity = new EditBox(font, leftPos + 8, topPos + 150, 40, 12,
-                Component.translatable("gui.bobbypipes.request.quantity"));
-        quantity.setMaxLength(8);
-        quantity.setFilter(text -> text.isEmpty() || text.chars().allMatch(Character::isDigit));
-        quantity.setValue("1");
+        int ay = actionY();
+        int qtyLabelW = font.width(QTY_LABEL);
+        int qtyX = leftPos + CONTENT_X + qtyLabelW + 3;
+        quantity = UiTextBox.builder(font, Component.translatable("gui.bobbypipes.request.quantity"))
+                .bounds(qtyX, topPos + ay, QTY_W, ACTION_H)
+                .theme(theme)
+                .maxLength(8)
+                .filter(text -> text.isEmpty() || text.chars().allMatch(Character::isDigit))
+                .value("1")
+                .build();
         addRenderableWidget(quantity);
 
-        requestButton = Button.builder(
+        int requestX = qtyX + QTY_W + TOOL_GAP;
+        int requestW = contentRight - requestX;
+        requestButton = UiButton.builder(
                         Component.translatable("gui.bobbypipes.request.submit"),
                         button -> sendRequest())
-                .bounds(leftPos + 56, topPos + 146, 129, 20)
-                .build();
+                .bounds(requestX, topPos + ay, Math.max(48, requestW), ACTION_H)
+                .build()
+                .setTheme(theme);
         addRenderableWidget(requestButton);
 
         rebuildFilter();
@@ -138,11 +211,12 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
             return;
         }
         shortfallModal = shortfalls;
-        modalClose = Button.builder(
+        modalClose = UiButton.builder(
                         Component.translatable("gui.bobbypipes.request.close"),
                         button -> closeShortfallModal())
                 .bounds(leftPos + imageWidth / 2 - 30, topPos + modalHeight() - 26, 60, 20)
-                .build();
+                .build()
+                .setTheme(PipeThemes.REQUEST);
         addRenderableWidget(modalClose);
     }
 
@@ -213,10 +287,10 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
                 ? "gui.bobbypipes.request.no_matches"
                 : "gui.bobbypipes.request.empty");
         int width = font.width(message);
-        int x = leftPos + GRID_X + (grid.width() - width) / 2;
-        int y = topPos + GRID_Y + (grid.height() - font.lineHeight) / 2;
+        int x = leftPos + CONTENT_X + (grid.width() - width) / 2;
+        int y = topPos + gridY() + (grid.height() - font.lineHeight) / 2;
         graphics.fill(x - 4, y - 3, x + width + 4, y + font.lineHeight + 2, 0xC0_10_10_10);
-        graphics.text(font, message, x, y, 0xFF_E0_E0_E0, false);
+        graphics.text(font, message, x, y, PipeThemes.REQUEST.labelMuted(), false);
     }
 
     /**
@@ -235,8 +309,7 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
         int y = topPos + 30;
 
         graphics.fill(0, 0, width, this.height, 0xA0_10_10_14);
-        graphics.fill(x - 2, y - 2, x + imageWidth + 2, y + height + 2, 0xFF_2B_2B_33);
-        graphics.fill(x, y, x + imageWidth, y + height, 0xFF_14_14_1A);
+        Panel.draw(graphics, PipeThemes.REQUEST, x, y, imageWidth, height);
 
         graphics.text(font, Component.translatable("gui.bobbypipes.request.missing.title"),
                 x + 8, y + 8, 0xFF_FF_8A_7A, false);
@@ -267,9 +340,9 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
     /**
      * Ordering for the grid.
      *
-     * <p>With grouping off, entries are sorted only by the active mode (A-Z / 1-9 / …).
+     * <p>With grouping off, entries are sorted only by the active mode (A-Z / 1-9 / ...).
      * With grouping on, every non-craftable entry is listed first (sorted by that mode),
-     * then every craftable entry (sorted the same way)  -  e.g. 1-9 stored, then 1-9 craft.
+     * then every craftable entry (sorted the same way) - e.g. 1-9 stored, then 1-9 craft.
      */
     private java.util.Comparator<NetworkStockPayload.Entry> comparator() {
         java.util.Comparator<NetworkStockPayload.Entry> byName =
@@ -328,23 +401,28 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
     /** White, not vanilla's dark grey: this panel is not a stone-coloured vanilla one. */
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
+        ScreenHeader.draw(graphics, font, PipeThemes.REQUEST, title, headerIcon, PanelStyle.LABEL);
+        graphics.text(
+                font,
+                QTY_LABEL,
+                CONTENT_X,
+                actionY() + (ACTION_H - 8) / 2,
+                PipeThemes.REQUEST.labelPrimary(),
+                false);
     }
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                ModGuiTextures.REQUEST,
-                leftPos,
-                topPos,
-                0.0F,
-                0.0F,
-                imageWidth,
-                imageHeight,
-                256,
-                256);
+        PipeGui.drawPanelAndMenuSlots(graphics, PipeThemes.REQUEST, leftPos, topPos, imageWidth, imageHeight, menu.slots);
+        PipeGui.drawSlotGrid(
+                graphics,
+                PipeThemes.REQUEST,
+                leftPos + CONTENT_X,
+                topPos + gridY(),
+                StockItemGrid.COLUMNS,
+                StockItemGrid.VISIBLE_ROWS,
+                StockItemGrid.SLOT);
     }
 
     @Override
@@ -409,7 +487,7 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
                     "gui.bobbypipes.request.shipped", result.shipped(), result.requested());
             color = 0xFF_55_FF_55;
         }
-        graphics.text(font, line, leftPos + 8, topPos + 172, color, false);
+        graphics.text(font, line, leftPos + CONTENT_X, topPos + statusY(), color, false);
     }
 
     @Override
@@ -450,7 +528,7 @@ public class RequestScreen extends AbstractContainerScreen<RequestMenu> {
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         if (grid != null) {
-            grid.mouseReleased();
+            grid.mouseReleased(event);
         }
         return super.mouseReleased(event);
     }

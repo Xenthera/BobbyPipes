@@ -1,10 +1,18 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+
+import java.util.function.Consumer;
 
 public final class ModItems {
 
@@ -20,16 +28,37 @@ public final class ModItems {
     public static final DeferredItem<Item> WRENCH = ITEMS.registerItem("wrench",
             props -> new Item(props.stacksTo(1)) {
                 @Override
-                public void appendHoverText(net.minecraft.world.item.ItemStack stack,
+                public void appendHoverText(ItemStack stack,
                                             Item.TooltipContext context,
-                                            net.minecraft.world.item.component.TooltipDisplay display,
-                                            java.util.function.Consumer<net.minecraft.network.chat.Component> lines,
-                                            net.minecraft.world.item.TooltipFlag flag) {
-                    lines.accept(net.minecraft.network.chat.Component
-                            .translatable("item.bobbypipes.wrench.tip")
-                            .withStyle(net.minecraft.ChatFormatting.GRAY));
+                                            TooltipDisplay display,
+                                            Consumer<Component> lines,
+                                            TooltipFlag flag) {
+                    lines.accept(Component.translatable("item.bobbypipes.wrench.tip")
+                            .withStyle(ChatFormatting.GRAY));
                 }
             });
+
+    /**
+     * Head-slot visor that shows live status of the pipe under the crosshair in world.
+     */
+    public static final DeferredItem<Item> PIPE_GOGGLES = ITEMS.registerItem("pipe_goggles",
+            props -> new Item(props.stacksTo(1).equippable(EquipmentSlot.HEAD)) {
+                @Override
+                public void appendHoverText(ItemStack stack,
+                                            Item.TooltipContext context,
+                                            TooltipDisplay display,
+                                            Consumer<Component> lines,
+                                            TooltipFlag flag) {
+                    lines.accept(Component.translatable("item.bobbypipes.pipe_goggles.tip")
+                            .withStyle(ChatFormatting.GRAY));
+                }
+            });
+
+    /**
+     * Client-only render stand-in for the routed-parcel cage. Not shown in the creative tab.
+     */
+    public static final DeferredItem<Item> PARCEL_CAGE = ITEMS.registerItem("parcel_cage",
+            props -> new Item(props.stacksTo(1)));
 
     private ModItems() {
     }

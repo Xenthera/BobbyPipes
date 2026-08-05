@@ -1,33 +1,50 @@
 package com.bobby.bobbypipes.client.screen;
 
+import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import com.bobby.bobbypipes.menu.PatternTableMenu;
 import com.bobby.bobbypipes.network.payload.SetCraftPatternPayload;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
  * LP Logistics Crafting Table style: faded ghost matrix/result, real resource buffer + output.
  */
-public class PatternTableScreen extends AbstractContainerScreen<PatternTableMenu> {
+public class PatternTableScreen extends ThemedContainerScreen<PatternTableMenu> {
 
-    private static final int GHOST_OVERLAY = 0x80_FF_FF_FF;
+    private ItemStack headerIcon = ItemStack.EMPTY;
+
+    private static final int INV_SLOT_Y = 151 + GuiLayout.CONTENT_TOP_PAD;
 
     public PatternTableScreen(PatternTableMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, 222);
-        this.inventoryLabelY = 128;
+        super(menu, inventory, title, GuiLayout.STANDARD_PANEL_WIDTH, 232 + PipeGui.CONTENT_PAD);
+        this.inventoryLabelX = GuiLayout.playerInventoryLabelX(GuiLayout.STANDARD_PANEL_WIDTH);
+        this.inventoryLabelY = GuiLayout.playerInventoryLabelY(INV_SLOT_Y);
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return PipeThemes.PATTERN_TABLE;
     }
 
     @Override
     protected void init() {
         super.init();
-        this.titleLabelX = 29;
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = PipeThemes.PATTERN_TABLE.titlePadY();
     }
 
     private void push(CraftPattern pattern) {
@@ -39,17 +56,20 @@ public class PatternTableScreen extends AbstractContainerScreen<PatternTableMenu
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                ModGuiTextures.PATTERN_TABLE,
-                leftPos,
-                topPos,
-                0.0F,
-                0.0F,
-                imageWidth,
-                imageHeight,
-                256,
-                256);
+        PipeGui.drawPanelAndMenuSlots(
+                graphics, PipeThemes.PATTERN_TABLE, leftPos, topPos, imageWidth, imageHeight,
+                GuiLayout.playerInventoryBandY(INV_SLOT_Y), menu.slots,
+                PatternTableBlockEntity.RESOURCE_SLOTS + PatternTableBlockEntity.OUTPUT_SLOTS);
+        PipeGui.drawSlotGrid(
+                graphics,
+                PipeThemes.PATTERN_TABLE,
+                leftPos + GhostCraftingLayout.gridLeft(0),
+                topPos + GhostCraftingLayout.gridTop(0),
+                3,
+                3,
+                GhostCraftingLayout.SLOT);
+        PipeGui.drawSlotFrame(graphics, PipeThemes.PATTERN_TABLE,
+                leftPos + GhostCraftingLayout.RESULT_X, topPos + GhostCraftingLayout.RESULT_Y);
     }
 
     @Override
@@ -65,39 +85,45 @@ public class PatternTableScreen extends AbstractContainerScreen<PatternTableMenu
                 int i = row * 3 + col;
                 ItemStack stack = i < pattern.inputs().size() ? pattern.inputs().get(i) : ItemStack.EMPTY;
                 if (!stack.isEmpty()) {
-                    int x = leftPos + GhostCraftingLayout.gridLeft(col) + 1;
-                    int y = topPos + GhostCraftingLayout.gridTop(row) + 1;
-                    graphics.item(stack, x, y);
-                    if (stack.getCount() > 1) {
-                        graphics.itemDecorations(font, stack, x, y);
-                    }
-                    graphics.fill(x, y, x + 16, y + 16, GHOST_OVERLAY);
+                    GhostCraftingLayout.drawGhostItem(
+                            graphics, font,
+                            leftPos + GhostCraftingLayout.gridLeft(col) + 1,
+                            topPos + GhostCraftingLayout.gridTop(row) + 1,
+                            stack, PipeThemes.PATTERN_TABLE);
                 }
             }
         }
         // One result well: show faded recipe ghost only while the real output is empty.
         ItemStack result = pattern.primaryOutput();
         if (!result.isEmpty() && menu.isOutputEmpty()) {
-            int x = leftPos + GhostCraftingLayout.RESULT_X + 1;
-            int y = topPos + GhostCraftingLayout.RESULT_Y + 1;
-            graphics.item(result, x, y);
-            // Show recipe amount (e.g. 4 planks) even when count is on the ghost stack.
-            if (result.getCount() > 1) {
-                graphics.itemDecorations(font, result, x, y);
-            }
-            graphics.fill(x, y, x + 16, y + 16, GHOST_OVERLAY);
+            GhostCraftingLayout.drawGhostItem(
+                    graphics, font,
+                    leftPos + GhostCraftingLayout.RESULT_X + 1,
+                    topPos + GhostCraftingLayout.RESULT_Y + 1,
+                    result, PipeThemes.PATTERN_TABLE);
         }
+    }
+
+    @Override
+    protected void extractTooltip(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        super.extractTooltip(graphics, mouseX, mouseY);
+        ItemStack ghost = GhostCraftingLayout.ghostAt(
+                menu.pattern(), mouseX, mouseY, leftPos, topPos, menu.isOutputEmpty());
+        if (ghost.isEmpty()) {
+            return;
+        }
+        graphics.setTooltipForNextFrame(
+                font, List.of(ghost.getHoverName()), Optional.empty(), ghost, mouseX, mouseY);
     }
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         // Drawn here rather than via super, which hardcodes vanilla's dark grey.
-        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
-        graphics.text(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY,
+        ScreenHeader.draw(graphics, font, PipeThemes.PATTERN_TABLE, title, headerIcon, PanelStyle.LABEL);
+        graphics.text(font, BobbyFonts.apply(playerInventoryTitle), inventoryLabelX, inventoryLabelY,
                 PanelStyle.LABEL, false);
-        // Already translated to panel origin by extractContents.
-        graphics.text(font, Component.translatable("gui.bobbypipes.pattern.resources"),
-                8, 80, PanelStyle.LABEL, false);
+        graphics.text(font, BobbyFonts.translatable("gui.bobbypipes.pattern.resources"),
+                8, 80 + PipeGui.CONTENT_PAD, PanelStyle.LABEL, false);
     }
 
     @Override

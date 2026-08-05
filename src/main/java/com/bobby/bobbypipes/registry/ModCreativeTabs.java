@@ -33,6 +33,7 @@ public final class ModCreativeTabs {
                         output.accept(ModBlocks.PATTERN_TABLE.get());
                         output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
                         output.accept(ModItems.WRENCH.get());
+                        output.accept(ModItems.PIPE_GOGGLES.get());
                     })
                     .build());
 

@@ -3,10 +3,13 @@ package com.bobby.bobbypipes.client.screen;
 import com.bobby.bobbypipes.menu.SupplierPipeMenu;
 import com.bobby.bobbypipes.network.payload.SetSupplierRequestsPayload;
 import com.bobby.bobbypipes.pipes.SupplierRequests;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
@@ -23,45 +26,57 @@ import java.util.Optional;
  * empty-handed). A different item replaces the slot. Scroll adjusts the target
  * (shift = ±16).
  */
-public class SupplierPipeScreen extends AbstractContainerScreen<SupplierPipeMenu> {
+public class SupplierPipeScreen extends ThemedContainerScreen<SupplierPipeMenu> {
 
     private static final int HOVER_TINT = 0x40_FF_FF_FF;
 
+    private ItemStack headerIcon = ItemStack.EMPTY;
+
     public SupplierPipeScreen(SupplierPipeMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, 166);
-        this.inventoryLabelY = 74;
+        super(menu, inventory, title, GuiLayout.STANDARD_PANEL_WIDTH, SupplierPipeMenu.PANEL_HEIGHT);
+        this.inventoryLabelX = GuiLayout.playerInventoryLabelX(GuiLayout.STANDARD_PANEL_WIDTH);
+        this.inventoryLabelY = GuiLayout.playerInventoryLabelY(SupplierPipeMenu.INV_SLOT_Y);
+        setHelpTooltip(Component.translatable(menu.passive()
+                ? "gui.bobbypipes.help.passive_supplier_pipe"
+                : "gui.bobbypipes.help.supplier_pipe"));
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return menu.passive() ? PipeThemes.PASSIVE_SUPPLIER : PipeThemes.SUPPLIER;
     }
 
     @Override
     protected void init() {
         super.init();
-        this.titleLabelX = 8;
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = uiTheme().titlePadY();
     }
 
     /** White, not vanilla's dark grey: this panel is not a stone-coloured vanilla one. */
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
-        graphics.text(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY,
+        var theme = menu.passive() ? PipeThemes.PASSIVE_SUPPLIER : PipeThemes.SUPPLIER;
+        ScreenHeader.draw(graphics, font, theme, title, headerIcon, PanelStyle.LABEL);
+        graphics.text(font, BobbyFonts.apply(playerInventoryTitle), inventoryLabelX, inventoryLabelY,
                 PanelStyle.LABEL, false);
     }
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                menu.passive()
-                        ? ModGuiTextures.PASSIVE_SUPPLIER_PIPE
-                        : ModGuiTextures.SUPPLIER_PIPE,
-                leftPos,
-                topPos,
-                0.0F,
-                0.0F,
-                imageWidth,
-                imageHeight,
-                256,
-                256);
+        var theme = menu.passive() ? PipeThemes.PASSIVE_SUPPLIER : PipeThemes.SUPPLIER;
+        PipeGui.drawPanelAndMenuSlots(
+                graphics, theme, leftPos, topPos, imageWidth, imageHeight,
+                GuiLayout.playerInventoryBandY(SupplierPipeMenu.INV_SLOT_Y), menu.slots);
+        PipeGui.drawSlotRow(
+                graphics,
+                theme,
+                leftPos + CraftingPipeLayout.slotX(0),
+                topPos + CraftingPipeLayout.slotY(),
+                SupplierRequests.SLOT_COUNT,
+                CraftingPipeLayout.SLOT);
     }
 
     @Override

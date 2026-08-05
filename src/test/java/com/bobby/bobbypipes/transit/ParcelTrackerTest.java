@@ -76,6 +76,38 @@ class ParcelTrackerTest {
     }
 
     @Test
+    @DisplayName("a custom hop length makes specific hops take longer, authoritatively")
+    void customHopLengthVariesPerHop() {
+        // Double time on the very first hop (leaving "a"), base rate everywhere else.
+        ParcelTracker.HopLength<String, String> length = (at, next, origin, destination, payload) ->
+                at.equals(origin) ? 10 : 5;
+        ParcelTracker<String, String> tracker = new ParcelTracker<>(5, length);
+        RoutingSnapshot<String> routes = line(1, "a", "b", "c");
+        long id = tracker.inject("iron", "a", "c", routes).orElseThrow();
+
+        assertEquals(10, tracker.parcel(id).orElseThrow().ticksForHop(),
+                "the extended hop's length is set the moment it begins, not guessed later");
+
+        // First (extended) hop: not done at tick 9, done by tick 10.
+        for (int tick = 1; tick < 10; tick++) {
+            assertTrue(tracker.tick(routes).isQuiet(), "first hop settled early on tick " + tick);
+        }
+        tracker.tick(routes);
+        assertEquals("b", tracker.parcel(id).orElseThrow().atNode(),
+                "extended first hop finished exactly at its own length, not the base rate");
+        assertEquals(5, tracker.parcel(id).orElseThrow().ticksForHop(),
+                "an ordinary hop after the extended one reverts to the base rate");
+
+        // Second (base-rate) hop: five more ticks to "c".
+        for (int tick = 1; tick < 5; tick++) {
+            assertTrue(tracker.tick(routes).isQuiet(), "second hop settled early on tick " + tick);
+        }
+        ParcelTracker.TickReport<String, String> report = tracker.tick(routes);
+        assertEquals(1, report.delivered().size());
+        assertEquals("c", report.delivered().getFirst().destination());
+    }
+
+    @Test
     @DisplayName("progress reports the fraction of the current hop covered")
     void progressInterpolates() {
         ParcelTracker<String, String> tracker = new ParcelTracker<>(4);

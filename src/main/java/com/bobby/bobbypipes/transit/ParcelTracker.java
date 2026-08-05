@@ -48,7 +48,23 @@ public final class ParcelTracker<N, P> {
         }
     }
 
+    /**
+     * How long one hop takes, given where it starts/ends and what it is carrying.
+     *
+     * <p>Almost every hop is the uniform base rate ({@link #ticksPerHop}), but a caller can
+     * make specific hops  -  typically the very first (leaving an origin inventory) or very
+     * last (arriving at the destination)  -  take longer, e.g. to cover the extra distance a
+     * rendered container arm adds. Whatever this returns becomes the parcel's authoritative
+     * timing for that hop; nothing downstream (server or client) recomputes it, so there is
+     * nothing for a renderer to independently guess and fall out of sync with.
+     */
+    @FunctionalInterface
+    public interface HopLength<N, P> {
+        int ticks(N at, N next, N origin, N destination, P payload);
+    }
+
     private final int ticksPerHop;
+    private final HopLength<N, P> hopLength;
     private final Map<Long, Parcel<N, P>> parcels = new LinkedHashMap<>();
     private long nextId = 1L;
 
@@ -58,10 +74,24 @@ public final class ParcelTracker<N, P> {
      *                    deliver in a single tick.
      */
     public ParcelTracker(int ticksPerHop) {
+        this(ticksPerHop, (at, next, origin, destination, payload) -> ticksPerHop);
+    }
+
+    /**
+     * @param ticksPerHop base rate for an ordinary hop, and the floor {@link #hopLength}
+     *                    results are not allowed to go below
+     * @param hopLength   per-hop timing; see {@link HopLength}
+     */
+    public ParcelTracker(int ticksPerHop, HopLength<N, P> hopLength) {
         if (ticksPerHop < 1) {
             throw new IllegalArgumentException("ticksPerHop must be at least 1, got " + ticksPerHop);
         }
         this.ticksPerHop = ticksPerHop;
+        this.hopLength = hopLength;
+    }
+
+    private int hopTicks(N at, N next, N origin, N destination, P payload) {
+        return Math.max(1, hopLength.ticks(at, next, origin, destination, payload));
     }
 
     public int ticksPerHop() {
@@ -93,7 +123,7 @@ public final class ParcelTracker<N, P> {
             // Already there. Still issue a parcel so the caller gets a delivery callback
             // through the same path as any other request.
             long id = nextId++;
-            parcels.put(id, new Parcel<>(id, payload, from, to, from, null, 0, routes.revision()));
+            parcels.put(id, new Parcel<>(id, payload, from, to, from, null, 0, ticksPerHop, routes.revision()));
             return Optional.of(id);
         }
         Optional<N> firstHop = routes.nextHop(from, to);
@@ -101,7 +131,8 @@ public final class ParcelTracker<N, P> {
             return Optional.empty();
         }
         long id = nextId++;
-        parcels.put(id, new Parcel<>(id, payload, from, to, from, firstHop.get(), 0, routes.revision()));
+        int ticks = hopTicks(from, firstHop.get(), from, to, payload);
+        parcels.put(id, new Parcel<>(id, payload, from, to, from, firstHop.get(), 0, ticks, routes.revision()));
         return Optional.of(id);
     }
 
@@ -158,13 +189,13 @@ public final class ParcelTracker<N, P> {
             }
 
             current = current.advanced();
-            if (current.ticksIntoHop() >= ticksPerHop) {
+            if (current.ticksIntoHop() >= current.ticksForHop()) {
                 N arrivedAt = current.nextHop();
                 if (!routes.contains(arrivedAt)) {
                     // Landing pad vanished mid-hop. Reseat from the pipe we still occupy;
                     // only strand if the destination is truly cut off.
                     current = reseatAfterTopologyChange(
-                            current.withRoute(null, routes.revision()), routes);
+                            current.withRoute(null, routes.revision(), ticksPerHop), routes);
                     if (current.hasArrived()) {
                         delivered.add(new Delivery<>(
                                 current.id(), current.payload(), current.destination()));
@@ -186,7 +217,10 @@ public final class ParcelTracker<N, P> {
                     continue;
                 }
                 N onward = routes.nextHop(arrivedAt, current.destination()).orElse(null);
-                current = current.movedToNextHop(onward);
+                int onwardTicks = onward == null
+                        ? ticksPerHop
+                        : hopTicks(arrivedAt, onward, current.origin(), current.destination(), current.payload());
+                current = current.movedToNextHop(onward, onwardTicks);
                 if (current.isStuck()) {
                     stranded.add(new Stranded<>(current.id(), current.payload(),
                             current.atNode(), current.destination()));
@@ -209,17 +243,17 @@ public final class ParcelTracker<N, P> {
      * If the pipe under the parcel was removed but its in-progress {@code nextHop} still
      * exists, the parcel snaps forward onto that hop and continues.
      */
-    private static <N, P> Parcel<N, P> reseatAfterTopologyChange(Parcel<N, P> parcel,
-                                                                 RoutingSnapshot<N> routes) {
+    private Parcel<N, P> reseatAfterTopologyChange(Parcel<N, P> parcel, RoutingSnapshot<N> routes) {
         long revision = routes.revision();
         N at = parcel.atNode();
         N dest = parcel.destination();
         N hop = parcel.nextHop();
+        N origin = parcel.origin();
+        P payload = parcel.payload();
 
         if (routes.contains(at)) {
             if (at.equals(dest)) {
-                return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
-                        at, null, 0, revision);
+                return new Parcel<>(parcel.id(), payload, origin, dest, at, null, 0, ticksPerHop, revision);
             }
             // Prefer the hop already in progress when it still leads to the destination so
             // breaking an unrelated spur does not restart interpolation mid-pipe.
@@ -227,24 +261,25 @@ public final class ParcelTracker<N, P> {
                     && routes.contains(hop)
                     && routes.topology().neighbours(at).containsKey(hop)
                     && (hop.equals(dest) || routes.canReach(hop, dest))) {
-                return parcel.withRoute(hop, revision);
+                return parcel.withRoute(hop, revision, hopTicks(at, hop, origin, dest, payload));
             }
             Optional<N> next = routes.nextHop(at, dest);
-            return parcel.withRoute(next.orElse(null), revision);
+            int ticks = next.map(n -> hopTicks(at, n, origin, dest, payload)).orElse(ticksPerHop);
+            return parcel.withRoute(next.orElse(null), revision, ticks);
         }
 
         // Pipe under us is gone. Advance onto the hop we were already crossing if it still
         // exists and can finish the trip (or is the destination).
         if (hop != null && routes.contains(hop)) {
             if (hop.equals(dest)) {
-                return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
-                        hop, null, 0, revision);
+                return new Parcel<>(parcel.id(), payload, origin, dest, hop, null, 0, ticksPerHop, revision);
             }
             Optional<N> next = routes.nextHop(hop, dest);
-            return new Parcel<>(parcel.id(), parcel.payload(), parcel.origin(), dest,
-                    hop, next.orElse(null), 0, revision);
+            int ticks = next.map(n -> hopTicks(hop, n, origin, dest, payload)).orElse(ticksPerHop);
+            return new Parcel<>(parcel.id(), payload, origin, dest,
+                    hop, next.orElse(null), 0, ticks, revision);
         }
 
-        return parcel.withRoute(null, revision);
+        return parcel.withRoute(null, revision, ticksPerHop);
     }
 }

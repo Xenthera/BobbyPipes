@@ -12,6 +12,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -50,14 +52,19 @@ public class SupplierPipeBlockEntity extends StockTargetPipeBlockEntity {
             return;
         }
         Set<Object> selfStores = InventoryAccess.attachedIdentities(level, worldPosition);
+        // Sum ghost counts per item (same as {@link #targetFor}) so two 64-log slots
+        // mean "keep 128", not two independent targets of 64 that collapse after the first.
+        Map<ItemResource, Integer> targets = new LinkedHashMap<>();
         for (int i = 0; i < SupplierRequests.SLOT_COUNT; i++) {
             ItemStack ghost = requests().slot(i);
-            if (ghost.isEmpty()) {
-                continue;
+            if (!ghost.isEmpty()) {
+                targets.merge(ItemResource.of(ghost), ghost.getCount(), Integer::sum);
             }
-            ItemResource item = ItemResource.of(ghost);
-            int target = ghost.getCount();
-            // Queued craft still covering this slot, but providers now have the item:
+        }
+        for (Map.Entry<ItemResource, Integer> entry : targets.entrySet()) {
+            ItemResource item = entry.getKey();
+            int target = entry.getValue();
+            // Queued craft still covering this item, but providers now have stock:
             // drop the unstarted craft tree and re-request so stock wins. Crafts that
             // have already pulled ingredients or reached the machine are left alone.
             if (providerFree(network, item, selfStores) > 0) {

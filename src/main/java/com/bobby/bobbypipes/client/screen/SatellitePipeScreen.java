@@ -3,40 +3,83 @@ package com.bobby.bobbypipes.client.screen;
 import com.bobby.bobbypipes.menu.SatellitePipeMenu;
 import com.bobby.bobbypipes.network.payload.SetSatelliteNamePayload;
 import com.bobby.bobbypipes.pipes.SatelliteNamingResult;
+import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
+import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.font.BobbyFonts;
+import com.bobby.bobbycore.client.gui.layout.GuiLayout;
+import com.bobby.bobbycore.client.gui.theme.UiTheme;
+import com.bobby.bobbycore.client.gui.widget.UiButton;
+import com.bobby.bobbycore.client.gui.widget.UiTextBox;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
-public class SatellitePipeScreen extends AbstractContainerScreen<SatellitePipeMenu> {
+public class SatellitePipeScreen extends ThemedContainerScreen<SatellitePipeMenu> {
 
-    private EditBox nameBox;
+    private static final int SIDE_PAD = 8;
+    private static final int FIELD_H = 16;
+    private static final int BUTTON_W = 40;
+    private static final int CONTENT_TOP = 6;
+    private static final int FOOTER_GAP = 3;
+    private static final int FOOTER_H = 10;
+    private static final int CONTENT_BOTTOM = 6;
+
+    private UiTextBox nameBox;
     private Component status = Component.empty();
     private int statusColor = PanelStyle.LABEL;
+    private ItemStack headerIcon = ItemStack.EMPTY;
 
     public SatellitePipeScreen(SatellitePipeMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, 90);
+        super(menu, inventory, title, GuiLayout.STANDARD_PANEL_WIDTH, panelHeight());
         this.inventoryLabelY = 1000;
+        setHelpTooltip(Component.translatable("gui.bobbypipes.help.satellite_pipe"));
+    }
+
+    @Override
+    protected UiTheme uiTheme() {
+        return PipeThemes.SATELLITE;
+    }
+
+    private static int panelHeight() {
+        return PipeThemes.SATELLITE.headerHeight()
+                + CONTENT_TOP
+                + FIELD_H
+                + FOOTER_GAP
+                + FOOTER_H
+                + CONTENT_BOTTOM;
+    }
+
+    private int fieldY() {
+        return PipeThemes.SATELLITE.headerHeight() + CONTENT_TOP;
+    }
+
+    private int footerY() {
+        return fieldY() + FIELD_H + FOOTER_GAP;
     }
 
     @Override
     protected void init() {
         super.init();
-        nameBox = new EditBox(font, leftPos + 20, topPos + 36, 100, 16,
-                Component.translatable("gui.bobbypipes.satellite.name"));
-        nameBox.setMaxLength(32);
-        nameBox.setValue(menu.satelliteName());
+        this.headerIcon = ScreenHeader.blockIcon(menu.pos());
+        this.titleLabelX = ScreenHeader.titleX();
+        this.titleLabelY = PipeThemes.SATELLITE.titlePadY();
+        int fieldW = imageWidth - SIDE_PAD * 2 - BUTTON_W - 4;
+        nameBox = UiTextBox.builder(font, Component.translatable("gui.bobbypipes.satellite.name"))
+                .bounds(leftPos + SIDE_PAD, topPos + fieldY(), fieldW, FIELD_H)
+                .theme(PipeThemes.SATELLITE)
+                .maxLength(32)
+                .value(menu.satelliteName())
+                .build();
         addRenderableWidget(nameBox);
-        addRenderableWidget(Button.builder(
+        addRenderableWidget(UiButton.builder(
                         Component.translatable("gui.bobbypipes.satellite.save"),
                         b -> ClientPacketDistributor.sendToServer(
                                 new SetSatelliteNamePayload(menu.pos(), nameBox.getValue())))
-                .bounds(leftPos + 124, topPos + 35, 40, 18)
+                .bounds(leftPos + SIDE_PAD + fieldW + 4, topPos + fieldY() - 1, BUTTON_W, FIELD_H + 2)
+                .theme(PipeThemes.SATELLITE)
                 .build());
         setInitialFocus(nameBox);
     }
@@ -46,36 +89,35 @@ public class SatellitePipeScreen extends AbstractContainerScreen<SatellitePipeMe
         if (nameBox != null && result == SatelliteNamingResult.SUCCESS) {
             nameBox.setValue(name);
         }
-        status = Component.translatable(result.langKey());
-        statusColor = result == SatelliteNamingResult.SUCCESS
-                ? PanelStyle.MARKER_GREEN
-                : PanelStyle.MARKER_RED;
+        // Success is visible via the persistent "Current ID" footer; keep the footer for errors.
+        if (result == SatelliteNamingResult.SUCCESS) {
+            status = Component.empty();
+        } else {
+            status = Component.translatable(result.langKey());
+            statusColor = PanelStyle.MARKER_RED;
+        }
     }
 
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         super.extractBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.blit(
-                RenderPipelines.GUI_TEXTURED,
-                ModGuiTextures.SATELLITE_PIPE,
-                leftPos,
-                topPos,
-                0.0F,
-                0.0F,
-                imageWidth,
-                imageHeight,
-                256,
-                256);
+        PipeGui.drawPanelAndMenuSlots(
+                graphics, PipeThemes.SATELLITE, leftPos, topPos, imageWidth, imageHeight, menu.slots);
     }
 
     @Override
     protected void extractLabels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        // Drawn here rather than via super, which hardcodes vanilla's dark grey.
-        graphics.text(font, title, titleLabelX, titleLabelY, PanelStyle.LABEL, false);
-        // Panel-relative: this method already runs inside a translate to leftPos/topPos,
-        // so adding them again put the status clean off the panel.
+        ScreenHeader.draw(graphics, font, PipeThemes.SATELLITE, title, headerIcon, PanelStyle.LABEL);
+        // Save feedback wins the footer briefly; otherwise show the active id when set.
         if (!status.getString().isEmpty()) {
-            graphics.text(font, status, 20, 60, statusColor, false);
+            graphics.text(font, BobbyFonts.apply(status), SIDE_PAD, footerY(), statusColor, false);
+            return;
+        }
+        String name = menu.satelliteName();
+        if (name != null && !name.isBlank()) {
+            Component current = BobbyFonts.apply(
+                    Component.translatable("gui.bobbypipes.satellite.current_id", name));
+            graphics.text(font, current, SIDE_PAD, footerY(), PanelStyle.MARKER_GREEN, false);
         }
     }
 
