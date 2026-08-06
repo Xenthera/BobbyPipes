@@ -9,6 +9,7 @@ import com.bobby.bobbypipes.network.RequestService;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
 import com.bobby.bobbypipes.network.SupplierReserves;
 import com.bobby.bobbypipes.request.RequestPlan;
+import com.bobby.bobbypipes.transit.ParcelTier;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -240,13 +241,17 @@ public final class NetworkCommand {
             return 0;
         }
 
-        int probe = EnergyRequestService.PACKET_SIZE_FE;
-        int room = EnergyAccess.insertable(level, at, probe);
+        // Probe for the whole ceiling rather than one packet's worth: parcel size is not
+        // fixed any more, so the useful number is the free space itself and which tier that
+        // is big enough to receive in one go.
+        int room = EnergyAccess.insertable(level, at, EnergyRequestService.MAX_PACKET_FE);
         int inbound = network.energySendQueue().queuedTo(at)
                 + network.energyLedger().inbound(at, EnergyKind.ENERGY);
         reply(context, "Energy at " + format(at) + ":");
-        reply(context, "  attached storage would take " + room + " of " + probe + " FE"
-                + (room == 0 ? "  <- nothing here will accept energy" : ""));
+        reply(context, "  attached storage would take " + room + " FE"
+                + (room == 0
+                        ? "  <- nothing here will accept energy"
+                        : " (room for a " + ParcelTier.forFe(room).label() + " parcel)"));
         reply(context, "  " + inbound + " FE already queued or in flight toward it");
 
         List<BlockPos> reachable = snapshot.routesFrom(at)

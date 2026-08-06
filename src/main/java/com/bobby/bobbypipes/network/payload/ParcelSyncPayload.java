@@ -55,6 +55,11 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
      *                    step with what the server is really doing
      * @param routed      true for logistics parcels (draw the pipe cage); false for
      *                    drifting items in plain pipe
+     * @param tier        parcel density as {@link com.bobby.bobbypipes.transit.ParcelTier#wireId()},
+     *                    or 0 for items and drift, which have no tier. Energy and fluid
+     *                    parcels all draw the same one-item model, so without this a packet
+     *                    carrying a million FE and one carrying a thousand are pixel
+     *                    identical in the pipe; the renderer sizes them by this instead.
      */
     public record Entry(
             long id,
@@ -65,7 +70,8 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
             ItemStack stack,
             Optional<Direction> enterFrom,
             Optional<Direction> exitTo,
-            boolean routed) {
+            boolean routed,
+            int tier) {
 
         public static final StreamCodec<RegistryFriendlyByteBuf, Entry> STREAM_CODEC =
                 StreamCodec.composite(
@@ -78,6 +84,12 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::enterFrom,
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::exitTo,
                         ByteBufCodecs.BOOL, Entry::routed,
+                        // VAR_INT rather than BYTE: the value is only ever 0-3, so it costs
+                        // the same one byte on the wire, and the field stays a plain int.
+                        ByteBufCodecs.VAR_INT, Entry::tier,
                         Entry::new);
+
+        /** Untiered: items and drifting items, which ship by the stack. */
+        public static final int NO_TIER = 0;
     }
 }

@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.EnergyProviderPipeBlock;
 import com.bobby.bobbypipes.transit.EnergyShipment;
+import com.bobby.bobbypipes.transit.ParcelTier;
 import com.bobby.bobbypipes.transit.ParcelTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -27,9 +28,13 @@ public final class EnergyRequestService {
     static final int PROMISE_TIMEOUT_TICKS = 20 * 60;
 
     /**
-     * FE one energy parcel carries, the same role a stack's 64-item cap plays for items.
+     * Most FE one energy parcel may carry.
+     *
+     * <p>This is a ceiling, not a packet size: a parcel carries whatever the source storage
+     * actually released, which is what decides its {@link com.bobby.bobbypipes.transit.ParcelTier}.
+     * A generator that dribbles out a few hundred FE per pull ships a few hundred FE.
      */
-    public static final int PACKET_SIZE_FE = 10_000;
+    public static final int MAX_PACKET_FE = ParcelTier.MAX_FE;
 
     private EnergyRequestService() {
     }
@@ -152,6 +157,9 @@ public final class EnergyRequestService {
         if (amountFe <= 0 || from.equals(dest)) {
             return 0;
         }
+        // One parcel means one parcel: anything past the ceiling is not sent rather than
+        // silently split here, since the caller is told what actually went.
+        amountFe = Math.min(amountFe, MAX_PACKET_FE);
         long promiseId = network.energyLedger().promise(from, dest, EnergyKind.ENERGY, amountFe,
                 level.getGameTime() + PROMISE_TIMEOUT_TICKS);
         EnergyShipment shipment = new EnergyShipment(amountFe, promiseId);

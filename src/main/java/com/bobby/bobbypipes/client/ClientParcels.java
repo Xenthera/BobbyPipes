@@ -49,6 +49,7 @@ public final class ClientParcels {
                 visual.finishing = false;
                 visual.server = entry;
                 visual.stack = entry.stack();
+                visual.tier = entry.tier();
                 rememberLeaveNext(visual, entry);
                 if (!visual.awaitingArrival && !visual.catchingUp) {
                     visual.routed = entry.routed();
@@ -93,6 +94,7 @@ public final class ClientParcels {
         visual.id = entry.id();
         visual.server = entry;
         visual.stack = entry.stack();
+        visual.tier = entry.tier();
         visual.finishing = false;
         visual.captureAt = entry.at().immutable();
         rememberLeaveNext(visual, entry);
@@ -229,7 +231,8 @@ public final class ClientParcels {
                     visual.exitTo,
                     visual.stack,
                     Mth.clamp(progress, 0.0f, 1.0f),
-                    showCage(visual)));
+                    showCage(visual),
+                    visual.tier));
         }
         return out;
     }
@@ -373,7 +376,8 @@ public final class ClientParcels {
             Optional<Direction> exitTo,
             ItemStack stack,
             float progress,
-            boolean routed) {
+            boolean routed,
+            int tier) {
     }
 
     private static final class Visual {
@@ -384,6 +388,12 @@ public final class ClientParcels {
         private Optional<Direction> exitTo;
         private ItemStack stack;
         private boolean routed;
+        /**
+         * Parcel density, 0 for items and drift. Fixed for a parcel's whole life (the
+         * amount it carries never changes in flight), so unlike hop state there is nothing
+         * here that has to be reconciled against the server mid-hop.
+         */
+        private int tier;
         private long hopStart;
         /**
          * How many ticks the current hop takes, straight from the server
@@ -425,6 +435,7 @@ public final class ClientParcels {
             this.exitTo = entry.exitTo();
             this.stack = entry.stack();
             this.routed = entry.routed();
+            this.tier = entry.tier();
             this.currentHopTicks = Math.max(1, entry.ticksForHop());
             this.hopStart = hopStart;
             this.finishing = false;

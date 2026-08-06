@@ -12,6 +12,8 @@ import com.bobby.bobbypipes.block.entity.StockTargetPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SupplierPipeBlockEntity;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import com.bobby.bobbypipes.pipes.SupplierRequests;
+import com.bobby.bobbypipes.transit.EnergyShipment;
+import com.bobby.bobbypipes.transit.FluidShipment;
 import com.bobby.bobbypipes.transit.ItemShipment;
 import com.bobby.bobbypipes.transit.Parcel;
 import net.minecraft.core.BlockPos;
@@ -20,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayList;
@@ -70,6 +73,7 @@ public final class PipeProbe {
         if (parcelsHere > 0) {
             lines.add("Parcels here: " + parcelsHere);
         }
+        appendEnergyAndFluidParcels(network, pos, lines);
 
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof CraftingPipeBlockEntity crafting) {
@@ -94,6 +98,48 @@ public final class PipeProbe {
             return List.copyOf(lines.subList(0, MAX_LINES));
         }
         return List.copyOf(lines);
+    }
+
+    /**
+     * Energy and fluid parcels sitting on this pipe, with what each is carrying.
+     *
+     * <p>Worth its own lines rather than folding into the item count above: these draw as
+     * one anonymous model, so the amount and tier are otherwise invisible in world, and
+     * seeing "3.4M FE T3" go past is the only way to confirm a big provider really is
+     * releasing in bulk rather than trickling.
+     */
+    private static void appendEnergyAndFluidParcels(PipeNetwork network, BlockPos pos,
+                                                    List<String> lines) {
+        for (Parcel<BlockPos, EnergyShipment> parcel : network.energyParcels().parcels()) {
+            if (!parcel.atNode().equals(pos) || lines.size() >= MAX_LINES) {
+                continue;
+            }
+            EnergyShipment shipment = parcel.payload();
+            lines.add("Energy: " + compact(shipment.amountFe()) + " FE " + shipment.tier().label());
+        }
+        for (Parcel<BlockPos, FluidShipment> parcel : network.fluidParcels().parcels()) {
+            if (!parcel.atNode().equals(pos) || lines.size() >= MAX_LINES) {
+                continue;
+            }
+            FluidShipment shipment = parcel.payload();
+            lines.add("Fluid: " + compact(shipment.amountMb()) + " mB "
+                    + fluidName(shipment.resource()) + " " + shipment.tier().label());
+        }
+    }
+
+    /** 1234567 as "1.2M", so a bulk parcel's amount fits one goggles line. */
+    private static String compact(int amount) {
+        if (amount >= 1_000_000) {
+            return String.format("%.1fM", amount / 1_000_000.0);
+        }
+        if (amount >= 10_000) {
+            return String.format("%.0fk", amount / 1000.0);
+        }
+        return Integer.toString(amount);
+    }
+
+    private static String fluidName(FluidResource fluid) {
+        return fluid.isEmpty() ? "empty" : fluid.getHoverName().getString();
     }
 
     private static void appendCrafting(ServerLevel level, PipeNetwork network, BlockPos pos,

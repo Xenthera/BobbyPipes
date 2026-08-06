@@ -104,18 +104,35 @@ public final class DeliveryLedger<N, I> {
      * promise accounting and diagnostics, not for subtracting from chest counts again.
      */
     public int reserved(N source, I item) {
-        return open.values().stream()
+        return saturate(open.values().stream()
                 .filter(promise -> promise.source().equals(source) && promise.item().equals(item))
-                .mapToInt(Promise::outstanding)
-                .sum();
+                .mapToLong(Promise::outstanding)
+                .sum());
     }
 
     /** How much of {@code item} is inbound to {@code requester} across all promises. */
     public int inbound(N requester, I item) {
-        return open.values().stream()
+        return saturate(open.values().stream()
                 .filter(promise -> promise.requester().equals(requester) && promise.item().equals(item))
-                .mapToInt(Promise::outstanding)
-                .sum();
+                .mapToLong(Promise::outstanding)
+                .sum());
+    }
+
+    /**
+     * Clamps a summed total into {@code int} range.
+     *
+     * <p>Both sums stay {@code int} on the way out because every caller does {@code int}
+     * arithmetic against item counts, FE, or mB, all of which are {@code int} at the
+     * capability boundary anyway. But the sum itself is taken in {@code long}: energy
+     * promises are individually large enough now (see
+     * {@link com.bobby.bobbypipes.transit.ParcelTier}) that enough in flight to one
+     * destination could wrap an {@code int} accumulator, and a wrapped negative inbound
+     * reads as "there is room for more" and pulls even harder. Clamping high is the safe
+     * direction to be wrong in: it says the destination is fuller than it is, which
+     * throttles, and it cannot be reached without a genuinely absurd number of parcels.
+     */
+    private static int saturate(long total) {
+        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
     }
 
     /**

@@ -415,7 +415,8 @@ public final class PipeNetwork {
                     stack,
                     enterFrom,
                     exitTo,
-                    true));
+                    true,
+                    ParcelSyncPayload.Entry.NO_TIER));
         }
         // Energy parcels ride the same sync, on the same shared routing graph as items,
         // just tagged into a disjoint id range so they never collide with an item parcel's
@@ -444,7 +445,8 @@ public final class PipeNetwork {
                     stack,
                     enterFrom,
                     exitTo,
-                    true));
+                    true,
+                    shipment.tier().wireId()));
         }
         // Fluid parcels, same reasoning as energy above but with their own id range
         // (FLUID_ID_TAG) so neither collides with the other or with items/drift.
@@ -472,7 +474,8 @@ public final class PipeNetwork {
                     stack,
                     enterFrom,
                     exitTo,
-                    true));
+                    true,
+                    shipment.tier().wireId()));
         }
         // Drifting items ride the same sync so they draw like anything else in a pipe.
         // ticksIntoHop is the raw drift clock (longer than routed); the client uses
@@ -512,7 +515,8 @@ public final class PipeNetwork {
                     stack,
                     pushedIn,
                     Optional.ofNullable(drifting.exitTo()),
-                    false));
+                    false,
+                    ParcelSyncPayload.Entry.NO_TIER));
         }
 
         PacketDistributor.sendToPlayersInDimension(

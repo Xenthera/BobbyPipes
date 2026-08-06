@@ -28,8 +28,16 @@ public record FluidShipment(FluidResource resource, int amountMb, long promiseId
         this(resource, amountMb, promiseId, null);
     }
 
+    /**
+     * How dense this packet is, derived from {@link #amountMb} rather than stored. See
+     * {@link ParcelTier}.
+     */
+    public ParcelTier tier() {
+        return ParcelTier.forMb(amountMb);
+    }
+
     @Override
     public String toString() {
-        return amountMb + " mB " + resource + " (promise " + promiseId + ")";
+        return amountMb + " mB " + resource + " " + tier().label() + " (promise " + promiseId + ")";
     }
 }

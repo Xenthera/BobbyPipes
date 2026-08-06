@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.FluidProviderPipeBlock;
 import com.bobby.bobbypipes.transit.FluidShipment;
+import com.bobby.bobbypipes.transit.ParcelTier;
 import com.bobby.bobbypipes.transit.ParcelTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -28,10 +29,13 @@ public final class FluidRequestService {
     static final int PROMISE_TIMEOUT_TICKS = 20 * 60;
 
     /**
-     * mB one fluid parcel carries, the same role a stack's 64-item cap plays for items. A
-     * bucket, to start; tune later.
+     * Most mB one fluid parcel may carry.
+     *
+     * <p>A ceiling, not a packet size: a parcel carries whatever the source tank actually
+     * released, which is what decides its {@link ParcelTier}. Fluid runs on its own tier
+     * floors, two orders of magnitude below energy's, because a bucket is 1000 mB.
      */
-    public static final int PACKET_SIZE_MB = 1000;
+    public static final int MAX_PACKET_MB = ParcelTier.MAX_MB;
 
     private FluidRequestService() {
     }
@@ -52,6 +56,9 @@ public final class FluidRequestService {
         if (fluid.isEmpty() || amountMb <= 0 || from.equals(dest)) {
             return 0;
         }
+        // One parcel means one parcel, same as energy: the surplus is not sent rather than
+        // split behind the caller's back.
+        amountMb = Math.min(amountMb, MAX_PACKET_MB);
         long promiseId = network.fluidLedger().promise(from, dest, fluid, amountMb,
                 level.getGameTime() + PROMISE_TIMEOUT_TICKS);
         FluidShipment shipment = new FluidShipment(fluid, amountMb, promiseId);

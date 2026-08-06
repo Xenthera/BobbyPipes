@@ -28,8 +28,18 @@ public record EnergyShipment(int amountFe, long promiseId, Direction entrySide) 
         this(amountFe, promiseId, null);
     }
 
+    /**
+     * How dense this packet is, derived from {@link #amountFe} rather than stored.
+     *
+     * <p>Nothing picks a tier and then fills it, so there is no second piece of state here
+     * that could disagree with the amount. See {@link ParcelTier}.
+     */
+    public ParcelTier tier() {
+        return ParcelTier.forFe(amountFe);
+    }
+
     @Override
     public String toString() {
-        return amountFe + " FE (promise " + promiseId + ")";
+        return amountFe + " FE " + tier().label() + " (promise " + promiseId + ")";
     }
 }

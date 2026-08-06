@@ -24,8 +24,15 @@ import java.util.Set;
  */
 public final class EnergySendQueue {
 
-    /** FE one provider may extract per send pulse, one packet's worth. */
-    public static final int FE_PER_PULSE = EnergyRequestService.PACKET_SIZE_FE;
+    /**
+     * FE one provider may extract per send pulse, one packet's worth.
+     *
+     * <p>Set to the largest parcel that exists rather than to a chosen throughput number:
+     * what a provider really moves per pulse is whatever its attached storage releases in
+     * one extract call, so the storage's own transfer rate is the throttle and this only
+     * stops a single parcel growing past {@link com.bobby.bobbypipes.transit.ParcelTier#MAX_FE}.
+     */
+    public static final int FE_PER_PULSE = EnergyRequestService.MAX_PACKET_FE;
 
     /** Ticks between extract pulses, same cadence as item providers. */
     public static final int PULSE_INTERVAL_TICKS = PipeExtractRates.PULSE_INTERVAL_TICKS;
@@ -111,7 +118,11 @@ public final class EnergySendQueue {
     }
 
     /**
-     * Extracts and injects as many pulse-sized parcels as current provider budgets allow.
+     * Extracts and injects one parcel per provider whose pulse has come round.
+     *
+     * <p>How much that parcel carries is not chosen here: it is whatever the source storage
+     * releases in a single extract call, capped at the tier ceiling. See {@link
+     * com.bobby.bobbypipes.transit.ParcelTier}.
      *
      * @return how much FE left providers this tick
      */
@@ -180,7 +191,14 @@ public final class EnergySendQueue {
                 continue;
             }
 
-            budget.consume(job.source, taken);
+            // Spend the whole pulse window, not just what was taken. The budget used to be
+            // exactly one packet, so a full pull emptied it and the next parcel from this
+            // provider waited a pulse; now that the window is the tier ceiling a small pull
+            // barely dents it, and the provider would dispatch again on the very next tick.
+            // Parcels a tick apart on an eight-tick hop visually pile on top of each other.
+            // Tiering is meant to buy throughput through bigger parcels, not more frequent
+            // ones, so one parcel per provider per pulse still holds however large it is.
+            budget.consume(job.source, allow);
             job.remaining -= taken;
             shipped += taken;
             if (job.remaining <= 0) {

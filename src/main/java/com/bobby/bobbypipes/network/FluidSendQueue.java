@@ -24,8 +24,13 @@ import java.util.Set;
  */
 public final class FluidSendQueue {
 
-    /** mB one provider may extract per send pulse, one packet's worth. */
-    public static final int MB_PER_PULSE = FluidRequestService.PACKET_SIZE_MB;
+    /**
+     * mB one provider may extract per send pulse, one packet's worth.
+     *
+     * <p>Same reasoning as {@link EnergySendQueue#FE_PER_PULSE}: the tank's own transfer
+     * rate is the real throttle, this only caps a single parcel.
+     */
+    public static final int MB_PER_PULSE = FluidRequestService.MAX_PACKET_MB;
 
     /** Ticks between extract pulses, same cadence as item and energy providers. */
     public static final int PULSE_INTERVAL_TICKS = PipeExtractRates.PULSE_INTERVAL_TICKS;
@@ -122,7 +127,8 @@ public final class FluidSendQueue {
     }
 
     /**
-     * Extracts and injects as many pulse-sized parcels as current provider budgets allow.
+     * Extracts and injects one parcel per provider whose pulse has come round, carrying
+     * whatever the source tank releases in a single extract call.
      *
      * @return how much mB left providers this tick
      */
@@ -186,7 +192,10 @@ public final class FluidSendQueue {
                 continue;
             }
 
-            budget.consume(job.source, taken);
+            // Whole window, same reasoning as EnergySendQueue: one parcel per provider per
+            // pulse regardless of size, or small pulls would dispatch every tick and stack
+            // parcels on top of each other in the pipe.
+            budget.consume(job.source, allow);
             job.remaining -= taken;
             shipped += taken;
             if (job.remaining <= 0) {
