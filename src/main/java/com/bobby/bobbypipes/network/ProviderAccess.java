@@ -1,6 +1,8 @@
 package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
+import com.bobby.bobbypipes.compat.digital.DigitalNetworkStore;
+import com.bobby.bobbypipes.compat.digital.DigitalNetworks;
 import com.bobby.bobbypipes.pipes.ProviderLeaveMode;
 import com.bobby.bobbypipes.pipes.ProviderSettings;
 import net.minecraft.core.BlockPos;
@@ -25,6 +27,10 @@ import java.util.Set;
  * leave mode are applied per inventory: leave-first/last skip that inventory's first/last
  * occupied stack in slot order. Reported amounts use extractable quantities (dry-run
  * extract) so storage-side reservations are not over-reported.
+ *
+ * <p>Adjacent AE2 / Refined Storage Interfaces additionally offer the full digital network
+ * (classic Logistics Pipes). Leave-one modes do not apply there; filters still do. The
+ * Interface export buffer on that face is skipped so stocked slots are not double-counted.
  */
 public final class ProviderAccess {
 
@@ -40,7 +46,14 @@ public final class ProviderAccess {
                                                                 Set<Object> claimed) {
         ProviderSettings settings = settingsAt(level, pipe);
         Map<ItemResource, Integer> totals = new LinkedHashMap<>();
-        InventoryAccess.forEachUnclaimed(level, pipe, claimed, (handler, ignored) -> {
+        visitDigitalThenInventories(level, pipe, claimed, (digital, direction) -> {
+            for (Map.Entry<ItemResource, Integer> entry : digital.summarize().entrySet()) {
+                if (!settings.accepts(entry.getKey()) || entry.getValue() <= 0) {
+                    continue;
+                }
+                totals.merge(entry.getKey(), entry.getValue(), Integer::sum);
+            }
+        }, (handler, ignored) -> {
             OccupiedBounds bounds = OccupiedBounds.of(handler);
             for (int slot = 0; slot < handler.size(); slot++) {
                 if (!settings.leaveMode().allowsOccupiedSlot(slot, bounds.first(), bounds.last())) {
@@ -69,12 +82,15 @@ public final class ProviderAccess {
         ProviderSettings settings = settingsAt(level, pipe);
         if (!settings.accepts(item)) {
             // Still claim attached stores so siblings do not double-count them as empty.
-            InventoryAccess.forEachUnclaimed(level, pipe, claimed, (handler, ignored) -> {
+            visitDigitalThenInventories(level, pipe, claimed, (digital, direction) -> {
+            }, (handler, ignored) -> {
             });
             return 0;
         }
         int[] total = {0};
-        InventoryAccess.forEachUnclaimed(level, pipe, claimed, (handler, ignored) -> {
+        visitDigitalThenInventories(level, pipe, claimed, (digital, direction) -> {
+            total[0] += digital.count(item);
+        }, (handler, ignored) -> {
             OccupiedBounds bounds = OccupiedBounds.of(handler);
             for (int slot = 0; slot < handler.size(); slot++) {
                 if (!settings.leaveMode().allowsOccupiedSlot(slot, bounds.first(), bounds.last())) {
@@ -118,8 +134,17 @@ public final class ProviderAccess {
             return 0;
         }
         int[] taken = {0};
+        Set<Object> claimed = new HashSet<>(excluded);
+        // Digital networks commit themselves; pull them before opening a NeoForge transaction.
+        forEachDigital(level, pipe, claimed, (digital, direction) -> {
+            if (taken[0] >= wanted) {
+                return;
+            }
+            taken[0] += digital.extract(item, wanted - taken[0]);
+        });
+        Set<BlockPos> skip = digitalFaces(level, pipe);
         try (Transaction transaction = Transaction.openRoot()) {
-            InventoryAccess.forEachUnclaimed(level, pipe, new HashSet<>(excluded), (handler, ignored) -> {
+            InventoryAccess.forEachUnclaimed(level, pipe, claimed, skip, (handler, ignored) -> {
                 if (taken[0] >= wanted) {
                     return;
                 }
@@ -160,11 +185,23 @@ public final class ProviderAccess {
         }
         Set<Object> seen = new HashSet<>(excluded);
         for (Direction direction : Direction.values()) {
+            BlockPos neighbour = pipe.relative(direction);
+            Optional<DigitalNetworkStore> digital =
+                    DigitalNetworks.tryAttach(level, neighbour, direction.getOpposite());
+            if (digital.isPresent()) {
+                if (!seen.add(digital.get().identity())) {
+                    continue;
+                }
+                if (digital.get().count(item) > 0) {
+                    return Optional.of(direction);
+                }
+                continue;
+            }
             ResourceHandler<ItemResource> handler = InventoryAccess.handlerAt(level, pipe, direction);
             if (handler == null) {
                 continue;
             }
-            Object identity = StorageIdentities.of(level, pipe.relative(direction));
+            Object identity = StorageIdentities.of(level, neighbour);
             if (!seen.add(identity)) {
                 continue;
             }
@@ -180,6 +217,72 @@ public final class ProviderAccess {
             }
         }
         return Optional.empty();
+    }
+
+    @FunctionalInterface
+    private interface DigitalVisitor {
+        void visit(DigitalNetworkStore store, Direction fromPipe);
+    }
+
+    /**
+     * Visits each unclaimed digital network on a face, then each remaining chest inventory.
+     * Digital faces are skipped in the inventory pass so Interface buffers are not double-counted.
+     */
+    private static void visitDigitalThenInventories(ServerLevel level,
+                                                    BlockPos pipe,
+                                                    Set<Object> claimed,
+                                                    DigitalVisitor digitalVisitor,
+                                                    InventoryAccess.HandlerVisitor inventoryVisitor) {
+        Set<BlockPos> skip = new HashSet<>();
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbour = pipe.relative(direction);
+            Optional<DigitalNetworkStore> digital =
+                    DigitalNetworks.tryAttach(level, neighbour, direction.getOpposite());
+            if (digital.isEmpty()) {
+                continue;
+            }
+            // Always skip the Interface buffer on this face, even if another provider already
+            // claimed the network (otherwise the buffer would still be counted as a chest).
+            skip.add(neighbour);
+            if (claimed.add(digital.get().identity())) {
+                digitalVisitor.visit(digital.get(), direction);
+            }
+        }
+        InventoryAccess.forEachUnclaimed(level, pipe, claimed, skip, inventoryVisitor);
+    }
+
+    private static void forEachDigital(ServerLevel level,
+                                       BlockPos pipe,
+                                       Set<Object> claimed,
+                                       DigitalVisitor visitor) {
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbour = pipe.relative(direction);
+            Optional<DigitalNetworkStore> digital =
+                    DigitalNetworks.tryAttach(level, neighbour, direction.getOpposite());
+            if (digital.isEmpty()) {
+                continue;
+            }
+            if (!claimed.add(digital.get().identity())) {
+                continue;
+            }
+            visitor.visit(digital.get(), direction);
+        }
+    }
+
+    /**
+     * Neighbours that expose a digital network, whether or not this provider claimed them
+     * (used so extract's inventory pass skips Interface buffers even when the network was
+     * claimed by an earlier provider on the same request).
+     */
+    private static Set<BlockPos> digitalFaces(ServerLevel level, BlockPos pipe) {
+        Set<BlockPos> faces = new HashSet<>();
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbour = pipe.relative(direction);
+            if (DigitalNetworks.tryAttach(level, neighbour, direction.getOpposite()).isPresent()) {
+                faces.add(neighbour);
+            }
+        }
+        return faces;
     }
 
     private static ProviderSettings settingsAt(ServerLevel level, BlockPos pipe) {

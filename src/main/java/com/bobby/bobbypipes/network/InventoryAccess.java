@@ -102,9 +102,25 @@ public final class InventoryAccess {
                                  BlockPos pipe,
                                  Set<Object> claimed,
                                  HandlerVisitor visitor) {
+        forEachUnclaimed(level, pipe, claimed, Set.of(), visitor);
+    }
+
+    /**
+     * As {@link #forEachUnclaimed(ServerLevel, BlockPos, Set, HandlerVisitor)}, skipping
+     * neighbours in {@code skipPositions} (e.g. AE2/RS Interfaces already offered as a
+     * full digital network so their export buffer is not also counted).
+     */
+    static void forEachUnclaimed(ServerLevel level,
+                                 BlockPos pipe,
+                                 Set<Object> claimed,
+                                 Set<BlockPos> skipPositions,
+                                 HandlerVisitor visitor) {
         Set<Object> seenOnPipe = new HashSet<>();
         for (Direction direction : Direction.values()) {
             BlockPos neighbour = pipe.relative(direction);
+            if (skipPositions.contains(neighbour)) {
+                continue;
+            }
             ResourceHandler<ItemResource> handler = handlerAt(level, pipe, direction);
             if (handler == null) {
                 continue;
