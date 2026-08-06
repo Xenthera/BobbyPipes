@@ -31,7 +31,8 @@ import java.util.Optional;
 /**
  * Browse network stock + craftables and submit a request.
  *
- * <p>Layout: header -> search toolbar (search + sort/group) -> scrollable grid -> qty + request -> status.
+ * <p>Layout: header -> search toolbar (search + sort/group) -> scrollable grid -> qty + request.
+ * Request outcomes go to chat; the shortfall modal still pops when nothing can be sourced.
  */
 public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
@@ -42,7 +43,6 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
     private static final int GRID_GAP = 4;
     private static final int ACTION_H = 16;
     private static final int QTY_W = 40;
-    private static final int STATUS_GAP = 4;
 
     private static final Component QTY_LABEL = BobbyFonts.literal("Qty:");
 
@@ -104,8 +104,7 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         int toolbarY = toolbarY(theme);
         int gridY = toolbarY + TOOLBAR_H + GRID_GAP;
         int actionY = gridY + StockItemGrid.VISIBLE_ROWS * StockItemGrid.SLOT + GRID_GAP;
-        int statusY = actionY + ACTION_H + STATUS_GAP;
-        return statusY + 10 + GuiLayout.CONTENT_BOTTOM_PAD;
+        return actionY + ACTION_H + GuiLayout.CONTENT_BOTTOM_PAD;
     }
 
     private static int toolbarY(UiTheme theme) {
@@ -122,10 +121,6 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
     private int actionY() {
         return gridY() + StockItemGrid.VISIBLE_ROWS * StockItemGrid.SLOT + GRID_GAP;
-    }
-
-    private int statusY() {
-        return actionY() + ACTION_H + STATUS_GAP;
     }
 
     @Override
@@ -239,8 +234,11 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         requestButton.active = !selected.isEmpty() && parseQuantity() > 0;
 
         RequestResultPayload latest = ClientRequestGui.lastResult();
-        if (latest != null && shortfallModal == null && !latest.shortfalls().isEmpty()
-                && !shortfallShown) {
+        // Only pop the shortfall card when nothing shipped. A partial dispatch already
+        // shows on the status line; opening the modal would interrupt spam-clicking
+        // Request for another batch of whatever is left.
+        if (latest != null && shortfallModal == null && latest.shipped() <= 0
+                && !latest.shortfalls().isEmpty() && !shortfallShown) {
             shortfallShown = true;
             openShortfallModal(latest.shortfalls());
         }
@@ -379,6 +377,10 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         if (selected.isEmpty() || amount <= 0) {
             return;
         }
+        // A new dispatch replaces the previous shortfall card so spam-clicking Request is
+        // not trapped behind the modal.
+        closeShortfallModal();
+        shortfallShown = false;
         ClientPacketDistributor.sendToServer(
                 new RequestItemPayload(menu.pos(), selected, amount));
     }
@@ -434,7 +436,6 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
                 drawEmptyNotice(graphics);
             }
         }
-        drawStatus(graphics);
         // Last, so it covers the panel. The close button is a normal widget and draws
         // itself; everything else here is painted over what is already on screen.
         renderShortfallModal(graphics);
@@ -463,38 +464,14 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         graphics.setTooltipForNextFrame(font, lines, Optional.empty(), stack, mouseX, mouseY);
     }
 
-    private void drawStatus(GuiGraphicsExtractor graphics) {
-        RequestResultPayload result = ClientRequestGui.lastResult();
-        Component line;
-        int color = 0xFF_C0_C0_C0;
-        if (result == null) {
-            if (selected.isEmpty()) {
-                return;
-            }
-            line = selected.getHoverName();
-        } else if (!result.hasPipe()) {
-            line = Component.translatable("gui.bobbypipes.request.no_pipe");
-            color = 0xFF_FF_55_55;
-        } else if (result.shipped() <= 0 && result.missing() > 0) {
-            line = Component.translatable("gui.bobbypipes.request.missing", result.missing());
-            color = 0xFF_FF_55_55;
-        } else if (result.missing() > 0) {
-            line = Component.translatable(
-                    "gui.bobbypipes.request.partial", result.shipped(), result.requested());
-            color = 0xFF_FF_AA_00;
-        } else {
-            line = Component.translatable(
-                    "gui.bobbypipes.request.shipped", result.shipped(), result.requested());
-            color = 0xFF_55_FF_55;
-        }
-        graphics.text(font, line, leftPos + CONTENT_X, topPos + statusY(), color, false);
-    }
-
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (shortfallModal != null) {
-            // Modal owns input: only its close button responds, so a stray click cannot
-            // fire another request through the panel behind it.
+            // Request stays clickable so each press can dispatch another batch; only the
+            // rest of the panel is locked to the shortfall card / its close button.
+            if (requestButton != null && requestButton.isMouseOver(event.x(), event.y())) {
+                return requestButton.mouseClicked(event, doubleClick);
+            }
             return modalClose != null && modalClose.mouseClicked(event, doubleClick);
         }
         // Clicking anywhere that is not the search box drops its focus, so typing goes to

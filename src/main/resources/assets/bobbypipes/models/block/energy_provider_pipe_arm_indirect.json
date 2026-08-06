@@ -1,0 +1,7 @@
+{
+  "parent": "bobbypipes:block/energy_provider_pipe_arm",
+  "textures": {
+    "side": "bobbypipes:block/energy_provider_pipe_arm_indirect",
+    "particle": "bobbypipes:block/energy_provider_pipe"
+  }
+}

@@ -3,6 +3,7 @@ package com.bobby.bobbypipes.network.payload;
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.menu.RequestMenus;
+import com.bobby.bobbypipes.network.RequestChat;
 import com.bobby.bobbypipes.network.RequestService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -48,8 +49,10 @@ public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity)
                 return;
             }
 
-            RequestService.Outcome outcome = RequestService.request(
-                    player.level(), payload.pos(), payload.item(), payload.quantity(), true);
+            RequestService.Outcome outcome = RequestService.requestWhatYouCan(
+                    player.level(), payload.pos(), payload.item(), payload.quantity());
+            int shipped = outcome.commitment() == null ? 0 : outcome.commitment().shipped();
+            RequestChat.item(player, payload.item(), payload.quantity(), shipped);
             context.reply(RequestResultPayload.from(outcome));
             if (outcome.hasPipe()) {
                 RequestMenus.syncStock(player, payload.pos());

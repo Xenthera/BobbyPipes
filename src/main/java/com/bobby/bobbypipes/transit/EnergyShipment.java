@@ -1,0 +1,35 @@
+package com.bobby.bobbypipes.transit;
+
+import net.minecraft.core.Direction;
+
+/**
+ * What an energy parcel carries: some amount of FE, plus the promise it settles.
+ *
+ * <p>Unlike {@link ItemShipment} there is no resource identity to carry, energy has no
+ * type, only an amount. Everything else about the shape matches items on purpose: same
+ * promise-id-over-matching-by-contents reasoning, same {@code entrySide} for the renderer
+ * and for {@code PipeNetwork}'s origin-hop arm timing.
+ *
+ * @param amountFe  how much FE this packet carries, always positive
+ * @param promiseId the {@code DeliveryLedger} promise this settles
+ * @param entrySide the energy storage face this packet was drawn out of, or null when it
+ *                  did not come from a real capability (there is no drift equivalent for
+ *                  energy, so in practice this is always set)
+ */
+public record EnergyShipment(int amountFe, long promiseId, Direction entrySide) {
+
+    public EnergyShipment {
+        if (amountFe <= 0) {
+            throw new IllegalArgumentException("shipment amount must be positive, got " + amountFe);
+        }
+    }
+
+    public EnergyShipment(int amountFe, long promiseId) {
+        this(amountFe, promiseId, null);
+    }
+
+    @Override
+    public String toString() {
+        return amountFe + " FE (promise " + promiseId + ")";
+    }
+}

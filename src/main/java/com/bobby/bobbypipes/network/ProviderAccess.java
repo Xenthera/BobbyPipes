@@ -96,6 +96,20 @@ public final class ProviderAccess {
      * @return how many were actually removed
      */
     public static int extract(ServerLevel level, BlockPos pipe, ItemResource item, int wanted) {
+        return extract(level, pipe, item, wanted, Set.of());
+    }
+
+    /**
+     * As {@link #extract(ServerLevel, BlockPos, ItemResource, int)}, but stores whose
+     * identity is in {@code excluded} are left alone.
+     *
+     * <p>A Supplier plans with its own chest excluded, but a Provider pipe touching both
+     * that chest and another one would still have drained the shared chest here, shipping
+     * the Supplier its own items. Seeding the claimed set with the exclusions makes the
+     * pull skip them for the same reason the plan did.
+     */
+    public static int extract(ServerLevel level, BlockPos pipe, ItemResource item, int wanted,
+                              Set<Object> excluded) {
         if (item.isEmpty() || wanted <= 0) {
             return 0;
         }
@@ -105,7 +119,7 @@ public final class ProviderAccess {
         }
         int[] taken = {0};
         try (Transaction transaction = Transaction.openRoot()) {
-            InventoryAccess.forEachUnclaimed(level, pipe, new HashSet<>(), (handler, ignored) -> {
+            InventoryAccess.forEachUnclaimed(level, pipe, new HashSet<>(excluded), (handler, ignored) -> {
                 if (taken[0] >= wanted) {
                     return;
                 }
@@ -131,6 +145,12 @@ public final class ProviderAccess {
 
     /** Face holding providable stock of {@code item}, if any. */
     public static Optional<Direction> sideHolding(ServerLevel level, BlockPos pipe, ItemResource item) {
+        return sideHolding(level, pipe, item, Set.of());
+    }
+
+    /** As {@link #sideHolding(ServerLevel, BlockPos, ItemResource)}, skipping {@code excluded} stores. */
+    public static Optional<Direction> sideHolding(ServerLevel level, BlockPos pipe, ItemResource item,
+                                                  Set<Object> excluded) {
         if (item.isEmpty()) {
             return Optional.empty();
         }
@@ -138,7 +158,7 @@ public final class ProviderAccess {
         if (!settings.accepts(item)) {
             return Optional.empty();
         }
-        Set<Object> seen = new HashSet<>();
+        Set<Object> seen = new HashSet<>(excluded);
         for (Direction direction : Direction.values()) {
             ResourceHandler<ItemResource> handler = InventoryAccess.handlerAt(level, pipe, direction);
             if (handler == null) {

@@ -10,13 +10,17 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.ScheduledTickAccess;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SimpleWaterloggedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.neoforged.neoforge.capabilities.Capabilities;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -33,8 +37,13 @@ import java.util.Map;
  * only look wrong. Direct/indirect marks on pipe arms are filled in by the network after
  * each topology rebuild; placement and neighbour updates only distinguish none / inventory /
  * pipe.
+ *
+ * <p>Waterloggable so flowing water does not break the thin tube geometry; water fills the
+ * empty space around the pipe instead.
  */
-public class PipeBlock extends Block {
+public class PipeBlock extends Block implements SimpleWaterloggedBlock {
+
+    public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
 
     public static final EnumProperty<PipeConnection> NORTH =
             EnumProperty.create("north", PipeConnection.class);
@@ -80,6 +89,7 @@ public class PipeBlock extends Block {
     public PipeBlock(Properties properties) {
         super(properties);
         registerDefaultState(defaultBlockState()
+                .setValue(WATERLOGGED, false)
                 .setValue(NORTH, PipeConnection.NONE)
                 .setValue(EAST, PipeConnection.NONE)
                 .setValue(SOUTH, PipeConnection.NONE)
@@ -104,12 +114,13 @@ public class PipeBlock extends Block {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(NORTH, EAST, SOUTH, WEST, UP, DOWN);
+        builder.add(WATERLOGGED, NORTH, EAST, SOUTH, WEST, UP, DOWN);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        BlockState state = defaultBlockState();
+        boolean waterlogged = context.getLevel().getFluidState(context.getClickedPos()).is(Fluids.WATER);
+        BlockState state = defaultBlockState().setValue(WATERLOGGED, waterlogged);
         for (Direction direction : Direction.values()) {
             state = state.setValue(propertyFor(direction),
                     connectionToward(context.getLevel(), context.getClickedPos(), direction,
@@ -131,9 +142,28 @@ public class PipeBlock extends Block {
                                      ScheduledTickAccess scheduledTicks, BlockPos pos,
                                      Direction direction, BlockPos neighbourPos,
                                      BlockState neighbourState, RandomSource random) {
+        if (state.getValue(WATERLOGGED)) {
+            scheduledTicks.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
+        }
         EnumProperty<PipeConnection> property = propertyFor(direction);
         return state.setValue(property,
                 connectionToward(level, pos, direction, state.getValue(property)));
+    }
+
+    @Override
+    protected FluidState getFluidState(BlockState state) {
+        return state.getValue(WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+    }
+
+    /**
+     * What this pipe carries, and so which capability an arm looks for.
+     *
+     * <p>Items unless a subclass says otherwise: plain transport pipe and every item pipe
+     * share this, and it keeps the medium in one overridable place rather than a type
+     * switch inside the connection check.
+     */
+    public PipeMedium medium() {
+        return PipeMedium.ITEM;
     }
 
     /**
@@ -142,10 +172,12 @@ public class PipeBlock extends Block {
      * <p>When the neighbour is a pipe, {@code existingPipeMark} is kept if it is already a
      * pipe mark; otherwise the face becomes {@link PipeConnection#INDIRECT} until the
      * network promotes direct corridors.
+     *
+     * <p>Non-pipe neighbours only earn an arm when they speak this pipe's {@link #medium}.
      */
-    public static PipeConnection connectionToward(LevelReader level, BlockPos pos,
-                                                  Direction direction,
-                                                  PipeConnection existingPipeMark) {
+    public PipeConnection connectionToward(LevelReader level, BlockPos pos,
+                                           Direction direction,
+                                           PipeConnection existingPipeMark) {
         BlockPos neighbour = pos.relative(direction);
         if (!level.hasChunkAt(neighbour)) {
             return PipeConnection.NONE;
@@ -155,11 +187,9 @@ public class PipeBlock extends Block {
         }
         // Capability lookup needs a real Level; during placement previews it may not be one.
         if (level instanceof Level realLevel && !realLevel.isClientSide()) {
-            if (realLevel.getCapability(
-                    Capabilities.Item.BLOCK, neighbour, direction.getOpposite()) != null) {
-                return PipeConnection.INVENTORY;
-            }
-            return PipeConnection.NONE;
+            return medium().presentAt(realLevel, neighbour, direction.getOpposite())
+                    ? PipeConnection.INVENTORY
+                    : PipeConnection.NONE;
         }
         return level.getBlockState(neighbour).hasBlockEntity()
                 ? PipeConnection.INVENTORY
@@ -191,8 +221,9 @@ public class PipeBlock extends Block {
 
     private VoxelShape shapeFor(BlockState state) {
         // DIRECT vs INDIRECT vs INVENTORY share the same arm geometry; collapse them so
-        // the cache is not tripled for identical shapes.
-        BlockState collapsed = state;
+        // the cache is not tripled for identical shapes. Waterlogging does not change the
+        // solid shape either.
+        BlockState collapsed = state.setValue(WATERLOGGED, false);
         for (Direction direction : Direction.values()) {
             EnumProperty<PipeConnection> property = propertyFor(direction);
             if (collapsed.getValue(property).isConnected()) {

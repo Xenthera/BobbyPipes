@@ -4,6 +4,12 @@ import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.AutocraftMonitorBlock;
 import com.bobby.bobbypipes.block.BasicPipeBlock;
 import com.bobby.bobbypipes.block.CraftingPipeBlock;
+import com.bobby.bobbypipes.block.EnergyProviderPipeBlock;
+import com.bobby.bobbypipes.block.EnergyRequestPipeBlock;
+import com.bobby.bobbypipes.block.EnergySupplierPipeBlock;
+import com.bobby.bobbypipes.block.FluidProviderPipeBlock;
+import com.bobby.bobbypipes.block.FluidRequestPipeBlock;
+import com.bobby.bobbypipes.block.FluidSupplierPipeBlock;
 import com.bobby.bobbypipes.block.PassiveSupplierPipeBlock;
 import com.bobby.bobbypipes.block.PatternTableBlock;
 import com.bobby.bobbypipes.block.PipeBlock;
@@ -49,6 +55,20 @@ public final class ModBlocks {
                     .sound(SoundType.METAL)
                     .noOcclusion()));
 
+    /** Offers the energy storage touching it to the network. */
+    public static final DeferredBlock<EnergyProviderPipeBlock> ENERGY_PROVIDER_PIPE =
+            registerWithItem("energy_provider_pipe", props -> new EnergyProviderPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Offers the fluid tank touching it to the network. */
+    public static final DeferredBlock<FluidProviderPipeBlock> FLUID_PROVIDER_PIPE =
+            registerWithItem("fluid_provider_pipe", props -> new FluidProviderPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
     /** Requests items from the network and delivers them into the inventories touching it. */
     public static final DeferredBlock<RequestPipeBlock> REQUEST_PIPE =
             registerWithItem("request_pipe", props -> new RequestPipeBlock(props
@@ -56,9 +76,37 @@ public final class ModBlocks {
                     .sound(SoundType.METAL)
                     .noOcclusion()));
 
+    /** Requests FE from the network and delivers it into the energy storage touching it. */
+    public static final DeferredBlock<EnergyRequestPipeBlock> ENERGY_REQUEST_PIPE =
+            registerWithItem("energy_request_pipe", props -> new EnergyRequestPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Requests fluid from the network and delivers it into the tank touching it. */
+    public static final DeferredBlock<FluidRequestPipeBlock> FLUID_REQUEST_PIPE =
+            registerWithItem("fluid_request_pipe", props -> new FluidRequestPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
     /** Keeps its attached inventory stocked by pulling from the network. */
     public static final DeferredBlock<SupplierPipeBlock> SUPPLIER_PIPE =
             registerWithItem("supplier_pipe", props -> new SupplierPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Keeps its attached energy storage topped up by pulling FE from the network. */
+    public static final DeferredBlock<EnergySupplierPipeBlock> ENERGY_SUPPLIER_PIPE =
+            registerWithItem("energy_supplier_pipe", props -> new EnergySupplierPipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /** Keeps its attached tank topped up by pulling fluid from the network. */
+    public static final DeferredBlock<FluidSupplierPipeBlock> FLUID_SUPPLIER_PIPE =
+            registerWithItem("fluid_supplier_pipe", props -> new FluidSupplierPipeBlock(props
                     .strength(0.3f)
                     .sound(SoundType.METAL)
                     .noOcclusion()));

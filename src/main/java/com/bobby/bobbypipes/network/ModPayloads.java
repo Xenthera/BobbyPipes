@@ -2,8 +2,14 @@ package com.bobby.bobbypipes.network;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.network.payload.CraftingPipeSyncPayload;
+import com.bobby.bobbypipes.network.payload.EnergyStockPayload;
+import com.bobby.bobbypipes.network.payload.FluidStockPayload;
+import com.bobby.bobbypipes.network.payload.RequestFluidPayload;
+import com.bobby.bobbypipes.network.payload.SetFluidSupplierTargetPayload;
 import com.bobby.bobbypipes.network.payload.ImportCraftPatternPayload;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
+import com.bobby.bobbypipes.network.payload.RequestEnergyPayload;
+import com.bobby.bobbypipes.network.payload.SetEnergySupplierTargetPayload;
 import com.bobby.bobbypipes.network.payload.CancelCraftJobPayload;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
 import com.bobby.bobbypipes.network.payload.CraftStatusPayload;
@@ -41,6 +47,8 @@ public final class ModPayloads {
                 .playToClient(CraftStatusPayload.TYPE, CraftStatusPayload.STREAM_CODEC)
                 .playToClient(CraftMonitorPayload.TYPE, CraftMonitorPayload.STREAM_CODEC)
                 .playToClient(NetworkStockPayload.TYPE, NetworkStockPayload.STREAM_CODEC)
+                .playToClient(EnergyStockPayload.TYPE, EnergyStockPayload.STREAM_CODEC)
+                .playToClient(FluidStockPayload.TYPE, FluidStockPayload.STREAM_CODEC)
                 .playToClient(RequestResultPayload.TYPE, RequestResultPayload.STREAM_CODEC)
                 .playToClient(SatelliteNameResultPayload.TYPE, SatelliteNameResultPayload.STREAM_CODEC)
                 .playToClient(SatelliteListPayload.TYPE, SatelliteListPayload.STREAM_CODEC)
@@ -51,6 +59,12 @@ public final class ModPayloads {
                         ProbePipePayload::handle)
                 .playToServer(RequestItemPayload.TYPE, RequestItemPayload.STREAM_CODEC,
                         RequestItemPayload::handle)
+                .playToServer(RequestEnergyPayload.TYPE, RequestEnergyPayload.STREAM_CODEC,
+                        RequestEnergyPayload::handle)
+                .playToServer(RequestFluidPayload.TYPE, RequestFluidPayload.STREAM_CODEC,
+                        RequestFluidPayload::handle)
+                .playToServer(SetFluidSupplierTargetPayload.TYPE, SetFluidSupplierTargetPayload.STREAM_CODEC,
+                        SetFluidSupplierTargetPayload::handle)
                 .playToServer(SetCraftPatternPayload.TYPE, SetCraftPatternPayload.STREAM_CODEC,
                         SetCraftPatternPayload::handle)
                 .playToServer(ImportCraftPatternPayload.TYPE, ImportCraftPatternPayload.STREAM_CODEC,
@@ -63,6 +77,8 @@ public final class ModPayloads {
                         SetDefaultRoutePayload::handle)
                 .playToServer(SetSupplierRequestsPayload.TYPE, SetSupplierRequestsPayload.STREAM_CODEC,
                         SetSupplierRequestsPayload::handle)
+                .playToServer(SetEnergySupplierTargetPayload.TYPE, SetEnergySupplierTargetPayload.STREAM_CODEC,
+                        SetEnergySupplierTargetPayload::handle)
                 .playToServer(SetProviderSettingsPayload.TYPE, SetProviderSettingsPayload.STREAM_CODEC,
                         SetProviderSettingsPayload::handle)
                 .playToServer(CancelCraftJobPayload.TYPE, CancelCraftJobPayload.STREAM_CODEC,

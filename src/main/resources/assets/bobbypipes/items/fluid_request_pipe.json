@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "bobbypipes:block/fluid_request_pipe_inventory"
+  }
+}

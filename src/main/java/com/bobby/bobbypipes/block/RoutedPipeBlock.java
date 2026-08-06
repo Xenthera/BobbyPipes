@@ -23,6 +23,9 @@ import net.minecraft.world.phys.BlockHitResult;
  * against chests and machines, so a bare click is far more often an attempt to open the
  * container behind them; requiring the tool keeps that from being hijacked. The Request
  * pipe is the exception, since it is used constantly and holds no configuration.
+ *
+ * <p>When a click opens a pipe screen, it consumes the interaction so the held item does
+ * not also place (buckets, blocks, …). Sneak to use the held item on/against the pipe.
  */
 public class RoutedPipeBlock extends PipeBlock {
 
@@ -52,14 +55,21 @@ public class RoutedPipeBlock extends PipeBlock {
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level,
                                           BlockPos pos, Player player, InteractionHand hand,
                                           BlockHitResult hitResult) {
-        if (!isWrench(stack)) {
+        // Sneak keeps the held item's normal use (bucket waterlogging, placing against the
+        // pipe, …). Without that escape hatch every click would be stolen by the UI.
+        if (player.isSecondaryUseActive()) {
             return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
         }
-        if (player instanceof ServerPlayer serverPlayer) {
-            openPipeScreen(serverPlayer, level, pos);
+        // Request pipes open on any bare click; the wrench opens every routed pipe. Either
+        // way the click belongs to the pipe, not the held item — otherwise a water bucket
+        // places fluid and only then opens the requester UI.
+        if (isWrench(stack) || opensWithoutWrench()) {
+            if (player instanceof ServerPlayer serverPlayer) {
+                openPipeScreen(serverPlayer, level, pos);
+            }
+            return InteractionResult.SUCCESS;
         }
-        // Consume on both sides so the held wrench does not also try to place something.
-        return InteractionResult.SUCCESS;
+        return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
     }
 
     @Override

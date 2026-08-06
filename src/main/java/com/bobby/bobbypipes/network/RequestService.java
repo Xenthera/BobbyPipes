@@ -102,7 +102,7 @@ public final class RequestService {
         RequestPlan<BlockPos, ItemResource> plan =
                 RequestPlanner.plan(new Demand<>(item, count), network.supplyFor(at, excludedStores));
         Commitment commitment = commit
-                ? RequestService.commit(level, network, plan, at, item, count)
+                ? RequestService.commit(level, network, plan, at, item, count, excludedStores)
                 : null;
         return new Outcome(plan, commitment);
     }
@@ -112,8 +112,8 @@ public final class RequestService {
      *
      * <p>Uses the same {@link RequestPlanner} → {@link #commit} chain as the request pipe
      * (including load-balancing a craft across every pipe with that recipe). Unlike a
-     * player request, an incomplete tree is trimmed to the satisfiable amount and that
-     * smaller complete plan is committed instead of failing closed.
+     * player request that fails closed, an incomplete tree is trimmed to the satisfiable
+     * amount and that smaller complete plan is committed instead.
      *
      * @return how many of the demand item were accepted onto the network
      */
@@ -122,34 +122,64 @@ public final class RequestService {
                                        ItemResource item,
                                        int count,
                                        java.util.Set<Object> excludedStores) {
+        Commitment commitment = requestWhatYouCan(level, at, item, count, excludedStores).commitment();
+        return commitment == null ? 0 : commitment.shipped();
+    }
+
+    /**
+     * Player-facing request: commit whatever the network can source right now.
+     *
+     * <p>Each click is independent. Items already queued or in flight from earlier clicks
+     * are invisible to the planner (already reserved), so spam-clicking the Request button
+     * keeps dispatching until free stock / craft capacity runs out, rather than being
+     * blocked by an outstanding request or failing closed when the ask exceeds remaining
+     * supply.
+     *
+     * <p>{@link Outcome#plan()} is always the plan against the original ask, so the GUI
+     * can still show what was missing. {@link Outcome#commitment()} reports shipped against
+     * that same ask.
+     */
+    public static Outcome requestWhatYouCan(ServerLevel level,
+                                            BlockPos at,
+                                            ItemResource item,
+                                            int count) {
+        return requestWhatYouCan(level, at, item, count, java.util.Set.of());
+    }
+
+    public static Outcome requestWhatYouCan(ServerLevel level,
+                                            BlockPos at,
+                                            ItemResource item,
+                                            int count,
+                                            java.util.Set<Object> excludedStores) {
         if (item.isEmpty() || count <= 0) {
-            return 0;
+            return Outcome.noPipe();
         }
         PipeNetwork network = PipeNetwork.get(level);
         if (!ensureRouted(network, at)) {
-            return 0;
+            return Outcome.noPipe();
         }
         NetworkSupply supply = network.supplyFor(at, excludedStores);
         RequestPlan<BlockPos, ItemResource> plan =
                 RequestPlanner.plan(new Demand<>(item, count), supply);
         if (plan.isEmpty()) {
-            return 0;
+            return new Outcome(plan, new Commitment(0, count));
         }
         if (plan.isComplete()) {
             // Commit this plan directly so a second re-plan cannot collapse a multi-crafter
             // split into a different shape.
-            return commit(level, network, plan, at, item, count).shipped();
+            return new Outcome(plan, commit(level, network, plan, at, item, count, excludedStores));
         }
         int want = satisfiableAmount(plan, item);
         if (want <= 0) {
-            return 0;
+            return new Outcome(plan, new Commitment(0, count));
         }
         RequestPlan<BlockPos, ItemResource> partial =
                 RequestPlanner.plan(new Demand<>(item, want), supply);
         if (!partial.isComplete()) {
-            return 0;
+            return new Outcome(plan, new Commitment(0, count));
         }
-        return commit(level, network, partial, at, item, want).shipped();
+        Commitment commitment = commit(level, network, partial, at, item, want, excludedStores);
+        return new Outcome(plan, new Commitment(commitment.shipped(), count));
     }
 
     /**
@@ -190,6 +220,25 @@ public final class RequestService {
                                     BlockPos requester,
                                     ItemResource requestedItem,
                                     int requestedAmount) {
+        return commit(level, network, plan, requester, requestedItem, requestedAmount,
+                java.util.Set.of());
+    }
+
+    /**
+     * As {@link #commit}, keeping {@code excludedStores} off limits when providers
+     * actually pull.
+     *
+     * <p>The plan was already built without those stores; passing them on means the queue
+     * cannot quietly take from them ticks later either, which is what stopped a Supplier
+     * being restocked out of its own chest by a Provider that happens to touch it.
+     */
+    public static Commitment commit(ServerLevel level,
+                                    PipeNetwork network,
+                                    RequestPlan<BlockPos, ItemResource> plan,
+                                    BlockPos requester,
+                                    ItemResource requestedItem,
+                                    int requestedAmount,
+                                    java.util.Set<Object> excludedStores) {
         // All or nothing, the way Logistics Pipes treats a request tree: it only fulfils
         // once the whole tree resolves. Committing an incomplete plan starts crafts that
         // can never finish, ties up provider stock in reservations, and leaves half made
@@ -214,7 +263,8 @@ public final class RequestService {
             if (!source.equals(requester) && routes.nextHop(source, requester).isEmpty()) {
                 continue;
             }
-            sendQueue.enqueue(source, requester, withdrawal.item(), withdrawal.amount());
+            sendQueue.enqueue(source, requester, withdrawal.item(), withdrawal.amount(),
+                    excludedStores);
             if (withdrawal.item().equals(requestedItem)) {
                 accepted += withdrawal.amount();
                 stillNeedFromCraft = Math.max(0, stillNeedFromCraft - withdrawal.amount());

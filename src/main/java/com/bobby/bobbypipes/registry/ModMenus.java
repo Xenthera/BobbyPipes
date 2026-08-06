@@ -4,6 +4,10 @@ import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.menu.AutocraftMonitorMenu;
 import com.bobby.bobbypipes.menu.BasicPipeMenu;
 import com.bobby.bobbypipes.menu.CraftingPipeMenu;
+import com.bobby.bobbypipes.menu.EnergyRequestMenu;
+import com.bobby.bobbypipes.menu.EnergySupplierPipeMenu;
+import com.bobby.bobbypipes.menu.FluidRequestMenu;
+import com.bobby.bobbypipes.menu.FluidSupplierPipeMenu;
 import com.bobby.bobbypipes.menu.PatternTableMenu;
 import com.bobby.bobbypipes.menu.ProviderPipeMenu;
 import com.bobby.bobbypipes.menu.RequestMenu;
@@ -24,6 +28,9 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<RequestMenu>> REQUEST =
             MENUS.register("request", () -> IMenuTypeExtension.create(RequestMenu::new));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<EnergyRequestMenu>> ENERGY_REQUEST =
+            MENUS.register("energy_request", () -> IMenuTypeExtension.create(EnergyRequestMenu::new));
+
     public static final DeferredHolder<MenuType<?>, MenuType<BasicPipeMenu>> BASIC_PIPE =
             MENUS.register("basic_pipe", () -> IMenuTypeExtension.create(BasicPipeMenu::new));
 
@@ -41,6 +48,15 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<SupplierPipeMenu>> SUPPLIER_PIPE =
             MENUS.register("supplier_pipe", () -> IMenuTypeExtension.create(SupplierPipeMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<EnergySupplierPipeMenu>> ENERGY_SUPPLIER_PIPE =
+            MENUS.register("energy_supplier_pipe", () -> IMenuTypeExtension.create(EnergySupplierPipeMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<FluidRequestMenu>> FLUID_REQUEST =
+            MENUS.register("fluid_request", () -> IMenuTypeExtension.create(FluidRequestMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<FluidSupplierPipeMenu>> FLUID_SUPPLIER_PIPE =
+            MENUS.register("fluid_supplier_pipe", () -> IMenuTypeExtension.create(FluidSupplierPipeMenu::new));
 
     public static final DeferredHolder<MenuType<?>, MenuType<AutocraftMonitorMenu>> AUTOCRAFT_MONITOR =
             MENUS.register("autocraft_monitor", () -> IMenuTypeExtension.create(AutocraftMonitorMenu::new));

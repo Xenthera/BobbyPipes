@@ -1,0 +1,7 @@
+{
+  "parent": "bobbypipes:block/fluid_supplier_pipe_arm",
+  "textures": {
+    "side": "bobbypipes:block/fluid_supplier_pipe_arm_indirect",
+    "particle": "bobbypipes:block/fluid_supplier_pipe"
+  }
+}

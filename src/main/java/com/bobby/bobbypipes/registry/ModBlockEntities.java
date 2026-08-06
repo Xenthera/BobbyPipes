@@ -4,6 +4,8 @@ import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.entity.AutocraftMonitorBlockEntity;
 import com.bobby.bobbypipes.block.entity.BasicPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.EnergySupplierPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.FluidSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PassiveSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
@@ -49,6 +51,14 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PassiveSupplierPipeBlockEntity>> PASSIVE_SUPPLIER_PIPE =
             BLOCK_ENTITIES.register("passive_supplier_pipe", () -> new BlockEntityType<>(
                     PassiveSupplierPipeBlockEntity::new, Set.of(ModBlocks.PASSIVE_SUPPLIER_PIPE.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<EnergySupplierPipeBlockEntity>> ENERGY_SUPPLIER_PIPE =
+            BLOCK_ENTITIES.register("energy_supplier_pipe", () -> new BlockEntityType<>(
+                    EnergySupplierPipeBlockEntity::new, Set.of(ModBlocks.ENERGY_SUPPLIER_PIPE.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FluidSupplierPipeBlockEntity>> FLUID_SUPPLIER_PIPE =
+            BLOCK_ENTITIES.register("fluid_supplier_pipe", () -> new BlockEntityType<>(
+                    FluidSupplierPipeBlockEntity::new, Set.of(ModBlocks.FLUID_SUPPLIER_PIPE.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutocraftMonitorBlockEntity>> AUTOCRAFT_MONITOR =
             BLOCK_ENTITIES.register("autocraft_monitor", () -> new BlockEntityType<>(

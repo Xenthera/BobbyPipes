@@ -4,6 +4,10 @@ import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.client.screen.AutocraftMonitorScreen;
 import com.bobby.bobbypipes.client.screen.BasicPipeScreen;
 import com.bobby.bobbypipes.client.screen.CraftingPipeScreen;
+import com.bobby.bobbypipes.client.screen.EnergyRequestScreen;
+import com.bobby.bobbypipes.client.screen.EnergySupplierPipeScreen;
+import com.bobby.bobbypipes.client.screen.FluidRequestScreen;
+import com.bobby.bobbypipes.client.screen.FluidSupplierPipeScreen;
 import com.bobby.bobbypipes.client.screen.PatternTableScreen;
 import com.bobby.bobbypipes.client.screen.ProviderPipeScreen;
 import com.bobby.bobbypipes.client.screen.RequestScreen;
@@ -11,6 +15,8 @@ import com.bobby.bobbypipes.client.screen.SatellitePipeScreen;
 import com.bobby.bobbypipes.client.screen.SupplierPipeScreen;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
 import com.bobby.bobbypipes.network.payload.CraftingPipeSyncPayload;
+import com.bobby.bobbypipes.network.payload.EnergyStockPayload;
+import com.bobby.bobbypipes.network.payload.FluidStockPayload;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
 import com.bobby.bobbypipes.network.payload.PatternTableSyncPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
@@ -33,6 +39,10 @@ public final class ClientMenus {
     @SubscribeEvent
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.REQUEST.get(), RequestScreen::new);
+        event.register(ModMenus.ENERGY_REQUEST.get(), EnergyRequestScreen::new);
+        event.register(ModMenus.ENERGY_SUPPLIER_PIPE.get(), EnergySupplierPipeScreen::new);
+        event.register(ModMenus.FLUID_REQUEST.get(), FluidRequestScreen::new);
+        event.register(ModMenus.FLUID_SUPPLIER_PIPE.get(), FluidSupplierPipeScreen::new);
         event.register(ModMenus.BASIC_PIPE.get(), BasicPipeScreen::new);
         event.register(ModMenus.PROVIDER_PIPE.get(), ProviderPipeScreen::new);
         event.register(ModMenus.PATTERN_TABLE.get(), PatternTableScreen::new);
@@ -45,6 +55,8 @@ public final class ClientMenus {
     @SubscribeEvent
     public static void registerPayloadHandlers(RegisterClientPayloadHandlersEvent event) {
         event.register(NetworkStockPayload.TYPE, ClientRequestGui::handleStock);
+        event.register(EnergyStockPayload.TYPE, ClientEnergyRequestGui::handleStock);
+        event.register(FluidStockPayload.TYPE, ClientFluidRequestGui::handleStock);
         event.register(RequestResultPayload.TYPE, ClientRequestGui::handleResult);
         event.register(SatelliteNameResultPayload.TYPE, SatelliteNameResultPayload::handle);
         event.register(SatelliteListPayload.TYPE, SatelliteListPayload::handle);
@@ -56,6 +68,8 @@ public final class ClientMenus {
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientRequestGui.clear();
+        ClientEnergyRequestGui.clear();
+        ClientFluidRequestGui.clear();
         ClientCraftMonitor.clear();
     }
 }

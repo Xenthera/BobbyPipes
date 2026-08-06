@@ -39,10 +39,23 @@ public final class ProviderSendQueue {
      * budget allows.
      */
     public void enqueue(BlockPos source, BlockPos dest, ItemResource item, int amount) {
+        enqueue(source, dest, item, amount, Set.of());
+    }
+
+    /**
+     * As {@link #enqueue(BlockPos, BlockPos, ItemResource, int)}, but {@code excluded}
+     * stores are off limits when the pull actually happens.
+     *
+     * <p>The planner already hid those stores when choosing sources; the set has to ride
+     * along because extraction happens ticks later, and a provider touching both an
+     * excluded chest and an allowed one would otherwise take from either.
+     */
+    public void enqueue(BlockPos source, BlockPos dest, ItemResource item, int amount,
+                        Set<Object> excluded) {
         if (item.isEmpty() || amount <= 0) {
             return;
         }
-        jobs.add(new Job(source.immutable(), dest.immutable(), item, amount));
+        jobs.add(new Job(source.immutable(), dest.immutable(), item, amount, Set.copyOf(excluded)));
     }
 
     /** How many of {@code item} are still waiting to leave {@code source}. */
@@ -155,8 +168,9 @@ public final class ProviderSendQueue {
             int want = Math.min(job.remaining, allow);
             // Resolved before the extract, while the container still holds the item, so
             // the parcel sets off from the arm it actually came out of.
-            Direction from = ProviderAccess.sideHolding(level, job.source, job.item).orElse(null);
-            int taken = ProviderAccess.extract(level, job.source, job.item, want);
+            Direction from =
+                    ProviderAccess.sideHolding(level, job.source, job.item, job.excluded).orElse(null);
+            int taken = ProviderAccess.extract(level, job.source, job.item, want, job.excluded);
             if (taken <= 0) {
                 // Chest emptied or pipe broken  -  drop the rest of this job.
                 iterator.remove();
@@ -189,13 +203,17 @@ public final class ProviderSendQueue {
         private final BlockPos source;
         private final BlockPos dest;
         private final ItemResource item;
+        /** Store identities this job must not pull from, normally the requester's own. */
+        private final Set<Object> excluded;
         private int remaining;
 
-        private Job(BlockPos source, BlockPos dest, ItemResource item, int remaining) {
+        private Job(BlockPos source, BlockPos dest, ItemResource item, int remaining,
+                    Set<Object> excluded) {
             this.source = source;
             this.dest = dest;
             this.item = item;
             this.remaining = remaining;
+            this.excluded = excluded;
         }
     }
 }

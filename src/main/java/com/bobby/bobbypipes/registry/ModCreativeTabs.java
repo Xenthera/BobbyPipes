@@ -22,6 +22,7 @@ public final class ModCreativeTabs {
                     .withTabsBefore(CreativeModeTabs.SPAWN_EGGS)
                     .icon(() -> ModItems.WRENCH.get().getDefaultInstance())
                     .displayItems((params, output) -> {
+                        // Item pipes.
                         output.accept(ModBlocks.PIPE.get());
                         output.accept(ModBlocks.BASIC_PIPE.get());
                         output.accept(ModBlocks.PROVIDER_PIPE.get());
@@ -30,8 +31,22 @@ public final class ModCreativeTabs {
                         output.accept(ModBlocks.PASSIVE_SUPPLIER_PIPE.get());
                         output.accept(ModBlocks.CRAFTING_PIPE.get());
                         output.accept(ModBlocks.SATELLITE_PIPE.get());
+
+                        // Energy pipes.
+                        output.accept(ModBlocks.ENERGY_PROVIDER_PIPE.get());
+                        output.accept(ModBlocks.ENERGY_REQUEST_PIPE.get());
+                        output.accept(ModBlocks.ENERGY_SUPPLIER_PIPE.get());
+
+                        // Fluid pipes.
+                        output.accept(ModBlocks.FLUID_PROVIDER_PIPE.get());
+                        output.accept(ModBlocks.FLUID_REQUEST_PIPE.get());
+                        output.accept(ModBlocks.FLUID_SUPPLIER_PIPE.get());
+
+                        // Non-pipe blocks.
                         output.accept(ModBlocks.PATTERN_TABLE.get());
                         output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
+
+                        // Items.
                         output.accept(ModItems.WRENCH.get());
                         output.accept(ModItems.PIPE_GOGGLES.get());
                     })

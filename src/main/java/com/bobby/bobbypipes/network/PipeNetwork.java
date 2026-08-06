@@ -6,7 +6,10 @@ import com.bobby.bobbypipes.block.RoutedPipeBlock;
 import com.bobby.bobbypipes.menu.AutocraftMonitorMenus;
 import com.bobby.bobbypipes.network.payload.CraftStatusPayload;
 import com.bobby.bobbypipes.network.payload.ParcelSyncPayload;
+import com.bobby.bobbypipes.registry.ModItems;
 import com.bobby.bobbypipes.request.DeliveryLedger;
+import com.bobby.bobbypipes.transit.EnergyShipment;
+import com.bobby.bobbypipes.transit.FluidShipment;
 import com.bobby.bobbypipes.transit.ItemShipment;
 import com.bobby.bobbypipes.transit.Parcel;
 import com.bobby.bobbypipes.transit.ParcelTracker;
@@ -18,6 +21,7 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayDeque;
@@ -86,15 +90,69 @@ public final class PipeNetwork {
                 return Math.round(TICKS_PER_HOP * blocks);
             };
 
+    /**
+     * Same shape as {@link #HOP_LENGTH}, for energy parcels. Fluid will get an identical
+     * one when it is built. Kept as a separate constant (not shared/generic) because the
+     * two payload types are unrelated records and Java cannot express "any payload with an
+     * entrySide" without a shared interface that neither wants to implement for one field.
+     */
+    private static final ParcelTracker.HopLength<BlockPos, EnergyShipment> ENERGY_HOP_LENGTH =
+            (at, next, origin, destination, payload) -> {
+                float blocks = 1.0f;
+                if (at.equals(origin) && payload.entrySide() != null) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                if (next.equals(destination)) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                return Math.round(TICKS_PER_HOP * blocks);
+            };
+
+    /** Same shape as {@link #HOP_LENGTH}, for fluid parcels. */
+    private static final ParcelTracker.HopLength<BlockPos, FluidShipment> FLUID_HOP_LENGTH =
+            (at, next, origin, destination, payload) -> {
+                float blocks = 1.0f;
+                if (at.equals(origin) && payload.entrySide() != null) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                if (next.equals(destination)) {
+                    blocks += ARM_OFFSET_BLOCKS;
+                }
+                return Math.round(TICKS_PER_HOP * blocks);
+            };
+
+    /**
+     * High bit tag so energy parcel ids never collide with item parcel ids in the client's
+     * single {@code visuals} map, the same trick drift already uses (negation) for its own
+     * id space. Each {@link ParcelTracker} numbers its own parcels from 1, so without this
+     * an item parcel and an energy parcel could easily share a raw id.
+     */
+    private static final long ENERGY_ID_TAG = 1L << 61;
+
+    /** Same reasoning as {@link #ENERGY_ID_TAG}, a different bit so fluid never collides
+     * with item, energy, or drift ids either. */
+    private static final long FLUID_ID_TAG = 1L << 60;
+
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
     private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
     private final ParcelTracker<BlockPos, ItemShipment> parcels =
             new ParcelTracker<>(TICKS_PER_HOP, HOP_LENGTH);
+    private final DeliveryLedger<BlockPos, EnergyKind> energyLedger = new DeliveryLedger<>();
+    private final ParcelTracker<BlockPos, EnergyShipment> energyParcels =
+            new ParcelTracker<>(TICKS_PER_HOP, ENERGY_HOP_LENGTH);
+    private final DeliveryLedger<BlockPos, FluidResource> fluidLedger = new DeliveryLedger<>();
+    private final ParcelTracker<BlockPos, FluidShipment> fluidParcels =
+            new ParcelTracker<>(TICKS_PER_HOP, FLUID_HOP_LENGTH);
     private final DriftTracker drift;
     /** Shared by providers, crafters, and any other pipe that extracts from inventories. */
     private final ExtractPulseBudget<BlockPos> extractBudget = ExtractPulseBudget.basic();
     private final ProviderSendQueue sendQueue = new ProviderSendQueue(extractBudget);
+    /** Separate budget from items: energy amounts are a different scale than item counts. */
+    private final ExtractPulseBudget<BlockPos> energyExtractBudget = EnergySendQueue.defaultBudget();
+    private final EnergySendQueue energySendQueue = new EnergySendQueue(energyExtractBudget);
+    private final ExtractPulseBudget<BlockPos> fluidExtractBudget = FluidSendQueue.defaultBudget();
+    private final FluidSendQueue fluidSendQueue = new FluidSendQueue(fluidExtractBudget);
     private final CraftJobManager craftJobs = new CraftJobManager();
 
     /** Last scanned pipe lattice; used to paint routed-exit marks after a rebuild. */
@@ -129,6 +187,36 @@ public final class PipeNetwork {
     /** Items currently moving on this network. */
     public ParcelTracker<BlockPos, ItemShipment> parcels() {
         return parcels;
+    }
+
+    /** Outstanding energy promises on this network. */
+    public DeliveryLedger<BlockPos, EnergyKind> energyLedger() {
+        return energyLedger;
+    }
+
+    /** Energy currently moving on this network, on the same routing graph as items. */
+    public ParcelTracker<BlockPos, EnergyShipment> energyParcels() {
+        return energyParcels;
+    }
+
+    /** Energy withdrawals waiting to leave providers at their send rate. */
+    public EnergySendQueue energySendQueue() {
+        return energySendQueue;
+    }
+
+    /** Outstanding fluid promises on this network. */
+    public DeliveryLedger<BlockPos, FluidResource> fluidLedger() {
+        return fluidLedger;
+    }
+
+    /** Fluid currently moving on this network, on the same routing graph as items. */
+    public ParcelTracker<BlockPos, FluidShipment> fluidParcels() {
+        return fluidParcels;
+    }
+
+    /** Fluid withdrawals waiting to leave providers at their send rate. */
+    public FluidSendQueue fluidSendQueue() {
+        return fluidSendQueue;
     }
 
     /** Withdrawals waiting to leave providers at their send rate. */
@@ -229,7 +317,11 @@ public final class PipeNetwork {
 
         craftJobs.tick(level, this);
         sendQueue.tick(level, ledger, parcels, cache.current());
+        energySendQueue.tick(level, energyLedger, energyParcels, cache.current());
+        fluidSendQueue.tick(level, fluidLedger, fluidParcels, cache.current());
         RequestService.handle(level, this, parcels.tick(cache.current()));
+        EnergyRequestService.handle(level, this, energyParcels.tick(cache.current()));
+        FluidRequestService.handle(level, this, fluidParcels.tick(cache.current()));
         drift.tick(this);
         syncParcels();
         if (level.getGameTime() % 10 == 0) {
@@ -238,6 +330,8 @@ public final class PipeNetwork {
         syncCraftStatus();
 
         ledger.expire(level.getGameTime());
+        energyLedger.expire(level.getGameTime());
+        fluidLedger.expire(level.getGameTime());
         return rebuilt;
     }
 
@@ -274,7 +368,8 @@ public final class PipeNetwork {
             return;
         }
         long gameTime = level.getGameTime();
-        if (parcels.inFlight() == 0 && drift.inFlight() == 0) {
+        if (parcels.inFlight() == 0 && drift.inFlight() == 0 && energyParcels.inFlight() == 0
+                && fluidParcels.inFlight() == 0) {
             if (!lastParcelSyncWasEmpty) {
                 PacketDistributor.sendToPlayersInDimension(
                         level, new ParcelSyncPayload(TICKS_PER_HOP, gameTime, List.of()));
@@ -284,7 +379,8 @@ public final class PipeNetwork {
         }
         lastParcelSyncWasEmpty = false;
 
-        List<ParcelSyncPayload.Entry> entries = new ArrayList<>(parcels.inFlight());
+        List<ParcelSyncPayload.Entry> entries = new ArrayList<>(
+                parcels.inFlight() + energyParcels.inFlight() + fluidParcels.inFlight());
         for (Parcel<BlockPos, ItemShipment> parcel : parcels.parcels()) {
             ItemShipment shipment = parcel.payload();
             ItemStack stack = shipment.resource().toStack(shipment.count());
@@ -312,6 +408,63 @@ public final class PipeNetwork {
 
             entries.add(new ParcelSyncPayload.Entry(
                     parcel.id(),
+                    parcel.atNode(),
+                    Optional.ofNullable(parcel.nextHop()),
+                    parcel.ticksIntoHop(),
+                    parcel.ticksForHop(),
+                    stack,
+                    enterFrom,
+                    exitTo,
+                    true));
+        }
+        // Energy parcels ride the same sync, on the same shared routing graph as items,
+        // just tagged into a disjoint id range so they never collide with an item parcel's
+        // id in the client's single visuals map (see ENERGY_ID_TAG).
+        for (Parcel<BlockPos, EnergyShipment> parcel : energyParcels.parcels()) {
+            EnergyShipment shipment = parcel.payload();
+            ItemStack stack = new ItemStack(ModItems.ENERGY_PARCEL.get());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            Optional<net.minecraft.core.Direction> enterFrom =
+                    parcel.atNode().equals(parcel.origin())
+                            ? Optional.ofNullable(shipment.entrySide())
+                            : Optional.empty();
+            Optional<net.minecraft.core.Direction> exitTo =
+                    parcel.nextHop() != null && parcel.nextHop().equals(parcel.destination())
+                            ? EnergyAccess.sideAccepting(level, parcel.destination())
+                            : Optional.empty();
+
+            entries.add(new ParcelSyncPayload.Entry(
+                    parcel.id() | ENERGY_ID_TAG,
+                    parcel.atNode(),
+                    Optional.ofNullable(parcel.nextHop()),
+                    parcel.ticksIntoHop(),
+                    parcel.ticksForHop(),
+                    stack,
+                    enterFrom,
+                    exitTo,
+                    true));
+        }
+        // Fluid parcels, same reasoning as energy above but with their own id range
+        // (FLUID_ID_TAG) so neither collides with the other or with items/drift.
+        for (Parcel<BlockPos, FluidShipment> parcel : fluidParcels.parcels()) {
+            FluidShipment shipment = parcel.payload();
+            ItemStack stack = new ItemStack(ModItems.FLUID_PARCEL.get());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            Optional<net.minecraft.core.Direction> enterFrom =
+                    parcel.atNode().equals(parcel.origin())
+                            ? Optional.ofNullable(shipment.entrySide())
+                            : Optional.empty();
+            Optional<net.minecraft.core.Direction> exitTo =
+                    parcel.nextHop() != null && parcel.nextHop().equals(parcel.destination())
+                            ? FluidAccess.sideAccepting(level, parcel.destination(), shipment.resource())
+                            : Optional.empty();
+
+            entries.add(new ParcelSyncPayload.Entry(
+                    parcel.id() | FLUID_ID_TAG,
                     parcel.atNode(),
                     Optional.ofNullable(parcel.nextHop()),
                     parcel.ticksIntoHop(),

@@ -33,6 +33,20 @@ repositories {
         name = 'BlameJared'
         url = 'https://maven.blamejared.com'
     }
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content {
+            includeGroup 'curse.maven'
+        }
+    }
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
 }
 
 base {
@@ -153,6 +167,15 @@ dependencies {
 
     // Optional sibling for pipes-vs-chests testing in runClient.
     localRuntime 'com.bobby.bobbychests:bobbychests:1.0.0'
+
+    // Optional Just Dire Things: generators / energy for pipe testing.
+    localRuntime "curse.maven:just-dire-things-1002348:${justdirethings_file}"
+
+    // Optional Iron Tanks: tiered + creative fluid tanks for fluid pipe testing.
+    localRuntime "maven.modrinth:iron-tanks:${irontanks_version}"
+
+    // Optional Energized Power: fluid tanks, pumps, generators, battery boxes.
+    localRuntime "maven.modrinth:energized-power:${energizedpower_version}"
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar

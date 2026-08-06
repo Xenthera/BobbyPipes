@@ -60,6 +60,20 @@ public final class ModItems {
     public static final DeferredItem<Item> PARCEL_CAGE = ITEMS.registerItem("parcel_cage",
             props -> new Item(props.stacksTo(1)));
 
+    /**
+     * Client-only render stand-in for an energy parcel in transit. Not shown in the
+     * creative tab. Placeholder texture; a proper one comes later.
+     */
+    public static final DeferredItem<Item> ENERGY_PARCEL = ITEMS.registerItem("energy_parcel",
+            props -> new Item(props.stacksTo(1)));
+
+    /**
+     * Client-only render stand-in for a fluid parcel in transit. Not shown in the
+     * creative tab. Placeholder texture; a proper one comes later.
+     */
+    public static final DeferredItem<Item> FLUID_PARCEL = ITEMS.registerItem("fluid_parcel",
+            props -> new Item(props.stacksTo(1)));
+
     private ModItems() {
     }
 

@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "bobbypipes:block/energy_provider_pipe_inventory"
+  }
+}

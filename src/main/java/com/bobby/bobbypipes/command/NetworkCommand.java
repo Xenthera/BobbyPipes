@@ -1,9 +1,13 @@
 package com.bobby.bobbypipes.command;
 
+import com.bobby.bobbypipes.network.EnergyAccess;
+import com.bobby.bobbypipes.network.EnergyKind;
+import com.bobby.bobbypipes.network.EnergyRequestService;
 import com.bobby.bobbypipes.network.PipeNetwork;
 import com.bobby.bobbypipes.network.RouteTable;
 import com.bobby.bobbypipes.network.RequestService;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
+import com.bobby.bobbypipes.network.SupplierReserves;
 import com.bobby.bobbypipes.request.RequestPlan;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -30,6 +34,7 @@ import java.util.Optional;
  *   /bobbypipes route &lt;from&gt; &lt;to&gt;      hop count and first step between two pipes
  *   /bobbypipes plan &lt;at&gt; &lt;item&gt; &lt;count&gt;    plan a request without moving anything
  *   /bobbypipes request &lt;at&gt; &lt;item&gt; &lt;count&gt; plan it and actually ship the items
+ *   /bobbypipes energy &lt;at&gt;            why energy is or is not moving to that pipe
  *   /bobbypipes parcels                      what is currently in flight
  * </pre>
  */
@@ -59,6 +64,9 @@ public final class NetworkCommand {
                                 .then(Commands.argument("item", IdentifierArgument.id())
                                         .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                                 .executes(context -> request(context, true))))))
+                .then(Commands.literal("energy")
+                        .then(Commands.argument("at", BlockPosArgument.blockPos())
+                                .executes(NetworkCommand::reportEnergy)))
                 .then(Commands.literal("parcels").executes(NetworkCommand::reportParcels))
                 .then(Commands.literal("jobs").executes(NetworkCommand::reportJobs))
                 .then(Commands.literal("drift").executes(NetworkCommand::reportDrift)));
@@ -209,6 +217,67 @@ public final class NetworkCommand {
             entry.detail().forEach(detail -> reply(context, "      " + detail));
         }
         return entries.size();
+    }
+
+    /**
+     * Walks the whole energy request chain for one pipe and says where it stops.
+     *
+     * <p>Every stage between "hit request" and "FE lands in the machine" is invisible
+     * otherwise: whether the pipe is routed, whether the attached storage will take FE at
+     * all, which providers the network can see, and crucially whether each provider's
+     * storage will actually let go of what it is holding (plenty of generators expose a
+     * readable buffer they refuse to hand over).
+     */
+    private static int reportEnergy(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerLevel level = context.getSource().getLevel();
+        BlockPos at = BlockPosArgument.getLoadedBlockPos(context, "at");
+        PipeNetwork network = PipeNetwork.get(level);
+        RoutingSnapshot<BlockPos> snapshot = network.rebuildNow(at);
+
+        if (!snapshot.contains(at)) {
+            reply(context, "No routed pipe at " + format(at) + ".");
+            return 0;
+        }
+
+        int probe = EnergyRequestService.PACKET_SIZE_FE;
+        int room = EnergyAccess.insertable(level, at, probe);
+        int inbound = network.energySendQueue().queuedTo(at)
+                + network.energyLedger().inbound(at, EnergyKind.ENERGY);
+        reply(context, "Energy at " + format(at) + ":");
+        reply(context, "  attached storage would take " + room + " of " + probe + " FE"
+                + (room == 0 ? "  <- nothing here will accept energy" : ""));
+        reply(context, "  " + inbound + " FE already queued or in flight toward it");
+
+        List<BlockPos> reachable = snapshot.routesFrom(at)
+                .map(RouteTable::destinationsByCost)
+                .orElseGet(List::of);
+        int providers = 0;
+        for (BlockPos pos : reachable) {
+            if (!(level.getBlockState(pos).getBlock()
+                    instanceof com.bobby.bobbypipes.block.EnergyProviderPipeBlock)) {
+                continue;
+            }
+            providers++;
+            int held = EnergyAccess.count(level, pos);
+            int free = EnergyAccess.extractable(level, pos, Integer.MAX_VALUE);
+            int reserved = SupplierReserves.reservedFe(level, pos);
+            reply(context, "  provider " + format(pos) + ": holds " + held
+                    + " FE, will release " + free + " FE"
+                    + (held > 0 && free == 0 ? "  <- storage refuses extraction" : "")
+                    + ", " + network.energySendQueue().queued(pos) + " FE queued out"
+                    + (reserved > 0 ? ", " + reserved + " FE held as a Supplier floor" : ""));
+        }
+        if (providers == 0) {
+            reply(context, "  no energy provider pipes reachable from here");
+        }
+
+        reply(context, "  network could supply "
+                + EnergyRequestService.availableFe(level, network, at) + " FE");
+        reply(context, "  " + network.energySendQueue().jobCount() + " queued send job(s), "
+                + network.energyParcels().inFlight() + " energy parcel(s) in flight, "
+                + network.energyLedger().openCount() + " open promise(s)");
+        return providers;
     }
 
     /** Reports what is currently moving, which is otherwise invisible until rendering lands. */
