@@ -24,6 +24,7 @@ public final class ModCreativeTabs {
                     .displayItems((params, output) -> {
                         // Item pipes.
                         output.accept(ModBlocks.PIPE.get());
+                        output.accept(ModBlocks.LINK_PIPE.get());
                         output.accept(ModBlocks.BASIC_PIPE.get());
                         output.accept(ModBlocks.PROVIDER_PIPE.get());
                         output.accept(ModBlocks.REQUEST_PIPE.get());
@@ -45,6 +46,7 @@ public final class ModCreativeTabs {
                         // Non-pipe blocks.
                         output.accept(ModBlocks.PATTERN_TABLE.get());
                         output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
+                        output.accept(ModBlocks.CHUNK_LOADER.get());
 
                         // Items.
                         output.accept(ModItems.WRENCH.get());

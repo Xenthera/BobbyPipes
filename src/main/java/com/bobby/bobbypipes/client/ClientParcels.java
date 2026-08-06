@@ -232,7 +232,8 @@ public final class ClientParcels {
                     visual.stack,
                     Mth.clamp(progress, 0.0f, 1.0f),
                     showCage(visual),
-                    visual.tier));
+                    visual.tier,
+                    visual.linkHop));
         }
         return out;
     }
@@ -261,10 +262,10 @@ public final class ClientParcels {
             float duration = visual.currentHopTicks;
             float serverProgress = (server.ticksIntoHop() + partialTick) / duration;
             float leadTicks = rawProgress(visual, clientGameTime, partialTick) * duration
-                    - serverProgress * duration;
+ - serverProgress * duration;
             if (leadTicks > 2.0f) {
                 visual.hopStart = clientGameTime
-                        - Math.round(serverProgress * duration);
+ - Math.round(serverProgress * duration);
             }
             return;
         }
@@ -309,12 +310,16 @@ public final class ClientParcels {
         if (arrived.equals(server.at())) {
             visual.next = server.next().map(BlockPos::immutable);
             visual.exitTo = server.exitTo();
+            visual.linkHop = server.linkHop();
             visual.catchingUp = false;
             // A real, server-confirmed hop: use its authoritative timing directly.
             visual.currentHopTicks = Math.max(1, server.ticksForHop());
         } else {
             visual.next = stepToward(arrived, server.at());
             visual.exitTo = Optional.empty();
+            visual.linkHop = visual.next
+                    .map(next -> ParcelSyncPayload.isLinkHop(arrived, next))
+                    .orElse(false);
             visual.catchingUp = true;
             // A fabricated catch-up step toward wherever the server has gotten to, not a
             // hop the server itself reported - no arm timing to inherit, just the base rate.
@@ -377,7 +382,8 @@ public final class ClientParcels {
             ItemStack stack,
             float progress,
             boolean routed,
-            int tier) {
+            int tier,
+            boolean linkHop) {
     }
 
     private static final class Visual {
@@ -394,6 +400,7 @@ public final class ClientParcels {
          * here that has to be reconciled against the server mid-hop.
          */
         private int tier;
+        private boolean linkHop;
         private long hopStart;
         /**
          * How many ticks the current hop takes, straight from the server
@@ -436,6 +443,7 @@ public final class ClientParcels {
             this.stack = entry.stack();
             this.routed = entry.routed();
             this.tier = entry.tier();
+            this.linkHop = entry.linkHop();
             this.currentHopTicks = Math.max(1, entry.ticksForHop());
             this.hopStart = hopStart;
             this.finishing = false;

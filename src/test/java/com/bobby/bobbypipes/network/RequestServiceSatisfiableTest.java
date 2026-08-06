@@ -19,12 +19,14 @@ class RequestServiceSatisfiableTest {
         // Use a fake ItemResource via empty plan structure - ItemResource needs MC.
         // This test only exercises arithmetic with null-safe equals on a stub identity.
         ItemResource item = ItemResource.EMPTY;
-        RequestPlan<BlockPos, ItemResource> plan = new RequestPlan<>(
-                List.of(new RequestPlan.Withdrawal<>(BlockPos.ZERO, item, 5)),
+        PipeNodeId node = PipeNodeId.of(
+                net.minecraft.world.level.Level.OVERWORLD, BlockPos.ZERO);
+        RequestPlan<PipeNodeId, ItemResource> plan = new RequestPlan<>(
+                List.of(new RequestPlan.Withdrawal<>(node, item, 5)),
                 List.of(new RequestPlan.CraftStep<>(
-                        BlockPos.ZERO, item, 4, 2,
+                        node, item, 4, 2,
                         List.of(new RequestPlan.Sourced<>(
-                                item, 2, new RequestPlan.Origin.Stock<>(BlockPos.ZERO))))),
+                                item, 2, new RequestPlan.Origin.Stock<>(node))))),
                 List.of(new Demand<>(item, 3)));
 
         // EMPTY equals EMPTY; craft adds 8, withdrawal 5 → 13

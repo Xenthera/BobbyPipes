@@ -28,7 +28,7 @@ class ParcelTierTest {
 
     /**
      * A bucket of fluid is a perfectly ordinary shipment and must not read as dense just
-     * because 1000 clears energy's floor  -  the whole reason fluid carries its own numbers.
+     * because 1000 clears energy's floor - the whole reason fluid carries its own numbers.
      */
     @Test
     void aBucketIsStandard() {

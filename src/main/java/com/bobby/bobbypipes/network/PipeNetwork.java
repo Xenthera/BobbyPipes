@@ -1,5 +1,6 @@
 package com.bobby.bobbypipes.network;
 
+import com.bobby.bobbypipes.block.LinkPipeBlock;
 import com.bobby.bobbypipes.block.PipeBlock;
 import com.bobby.bobbypipes.block.PipeConnection;
 import com.bobby.bobbypipes.block.RoutedPipeBlock;
@@ -27,6 +28,7 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,70 +58,16 @@ public final class PipeNetwork {
     /**
      * Ticks a parcel spends crossing one pipe.
      *
-     * <p>Base tier speed  -  slow enough to read, and to leave headroom for faster pipe
+     * <p>Base tier speed - slow enough to read, and to leave headroom for faster pipe
      * tiers later. At 20 tps this is 0.4s per block (1.5x the original 12-tick hop).
      */
     private static final int TICKS_PER_HOP = 8;
 
     /**
-     * Extra distance a hop covers when it runs down a container arm instead of just pipe
-     * centre to pipe centre  -  must match {@code ParcelDebugRenderer.ARM_OFFSET}, which is
-     * what actually draws that arm on the client.
+     * Extra distance when a hop runs an inventory arm (enter or exit). Must match
+     * {@code ParcelDebugRenderer.ARM_OFFSET}.
      */
     private static final float ARM_OFFSET_BLOCKS = 1.0f;
-
-    /**
-     * Authoritative per-hop timing: an ordinary hop is the base rate, but the very first
-     * hop off a real inventory (entry side set  -  a drift capture has none, so it stays
-     * unextended) and the hop landing on the destination each cover one extra arm's worth
-     * of distance, so they take proportionally longer. This is what the client renders
-     * from directly ({@code ParcelSyncPayload.Entry#ticksForHop}) instead of guessing its
-     * own duration  -  there is nothing left for it to fall out of sync with, because the
-     * server actually takes this long, not just fixed-tick-always with a slower-looking
-     * render layered on top.
-     */
-    private static final ParcelTracker.HopLength<BlockPos, ItemShipment> HOP_LENGTH =
-            (at, next, origin, destination, payload) -> {
-                float blocks = 1.0f;
-                if (at.equals(origin) && payload.entrySide() != null) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                if (next.equals(destination)) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                return Math.round(TICKS_PER_HOP * blocks);
-            };
-
-    /**
-     * Same shape as {@link #HOP_LENGTH}, for energy parcels. Fluid will get an identical
-     * one when it is built. Kept as a separate constant (not shared/generic) because the
-     * two payload types are unrelated records and Java cannot express "any payload with an
-     * entrySide" without a shared interface that neither wants to implement for one field.
-     */
-    private static final ParcelTracker.HopLength<BlockPos, EnergyShipment> ENERGY_HOP_LENGTH =
-            (at, next, origin, destination, payload) -> {
-                float blocks = 1.0f;
-                if (at.equals(origin) && payload.entrySide() != null) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                if (next.equals(destination)) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                return Math.round(TICKS_PER_HOP * blocks);
-            };
-
-    /** Same shape as {@link #HOP_LENGTH}, for fluid parcels. */
-    private static final ParcelTracker.HopLength<BlockPos, FluidShipment> FLUID_HOP_LENGTH =
-            (at, next, origin, destination, payload) -> {
-                float blocks = 1.0f;
-                if (at.equals(origin) && payload.entrySide() != null) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                if (next.equals(destination)) {
-                    blocks += ARM_OFFSET_BLOCKS;
-                }
-                return Math.round(TICKS_PER_HOP * blocks);
-            };
 
     /**
      * High bit tag so energy parcel ids never collide with item parcel ids in the client's
@@ -136,14 +84,11 @@ public final class PipeNetwork {
     private final ServerLevel level;
     private final RoutingCache<BlockPos> cache = new RoutingCache<>();
     private final DeliveryLedger<BlockPos, ItemResource> ledger = new DeliveryLedger<>();
-    private final ParcelTracker<BlockPos, ItemShipment> parcels =
-            new ParcelTracker<>(TICKS_PER_HOP, HOP_LENGTH);
+    private final ParcelTracker<BlockPos, ItemShipment> parcels;
     private final DeliveryLedger<BlockPos, EnergyKind> energyLedger = new DeliveryLedger<>();
-    private final ParcelTracker<BlockPos, EnergyShipment> energyParcels =
-            new ParcelTracker<>(TICKS_PER_HOP, ENERGY_HOP_LENGTH);
+    private final ParcelTracker<BlockPos, EnergyShipment> energyParcels;
     private final DeliveryLedger<BlockPos, FluidResource> fluidLedger = new DeliveryLedger<>();
-    private final ParcelTracker<BlockPos, FluidShipment> fluidParcels =
-            new ParcelTracker<>(TICKS_PER_HOP, FLUID_HOP_LENGTH);
+    private final ParcelTracker<BlockPos, FluidShipment> fluidParcels;
     private final DriftTracker drift;
     /** Shared by providers, crafters, and any other pipe that extracts from inventories. */
     private final ExtractPulseBudget<BlockPos> extractBudget = ExtractPulseBudget.basic();
@@ -169,9 +114,74 @@ public final class PipeNetwork {
     /** Avoid spamming empty parcel snapshots once the network is quiet. */
     private boolean lastParcelSyncWasEmpty = true;
 
+    /**
+     * Cross-dim trips keyed by parcel id while the parcel is still on this level:
+     * either staging toward the local link, or mid-wormhole hop toward the peer.
+     */
+    private final Map<Long, CrossDimTrip> itemCrossTrips = new HashMap<>();
+    private final Map<Long, CrossDimTrip> energyCrossTrips = new HashMap<>();
+    private final Map<Long, CrossDimTrip> fluidCrossTrips = new HashMap<>();
+
+    private record CrossDimTrip(PipeNodeId finalDest, PipeNodeId peer, boolean wormhole) {
+        CrossDimTrip asWormhole() {
+            return new CrossDimTrip(finalDest, peer, true);
+        }
+    }
+
     private PipeNetwork(ServerLevel level) {
         this.level = level;
         this.drift = new DriftTracker(level);
+        this.parcels = new ParcelTracker<>(TICKS_PER_HOP, this::itemHopTicks);
+        this.energyParcels = new ParcelTracker<>(TICKS_PER_HOP, this::energyHopTicks);
+        this.fluidParcels = new ParcelTracker<>(TICKS_PER_HOP, this::fluidHopTicks);
+    }
+
+    /**
+     * Centre-to-centre is 1 block. Enter/exit inventory arms add {@link #ARM_OFFSET_BLOCKS}
+     * only when the renderer will actually draw that arm (entrySide set, or an accepting
+     * inventory beside the destination). Charging an exit arm for every hop that lands on
+     * the destination (link mouths, bare request pipes, etc.) made those hops crawl.
+     */
+    private static int hopTicks(float blocks) {
+        return Math.max(1, Math.round(TICKS_PER_HOP * blocks));
+    }
+
+    private int itemHopTicks(BlockPos at, BlockPos next, BlockPos origin, BlockPos destination,
+                             ItemShipment payload) {
+        float blocks = 1.0f;
+        if (at.equals(origin) && payload.entrySide() != null) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        if (next.equals(destination)
+                && InventoryAccess.sideAccepting(level, destination, payload.resource()).isPresent()) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        return hopTicks(blocks);
+    }
+
+    private int energyHopTicks(BlockPos at, BlockPos next, BlockPos origin, BlockPos destination,
+                               EnergyShipment payload) {
+        float blocks = 1.0f;
+        if (at.equals(origin) && payload.entrySide() != null) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        if (next.equals(destination) && EnergyAccess.sideAccepting(level, destination).isPresent()) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        return hopTicks(blocks);
+    }
+
+    private int fluidHopTicks(BlockPos at, BlockPos next, BlockPos origin, BlockPos destination,
+                              FluidShipment payload) {
+        float blocks = 1.0f;
+        if (at.equals(origin) && payload.entrySide() != null) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        if (next.equals(destination)
+                && FluidAccess.sideAccepting(level, destination, payload.resource()).isPresent()) {
+            blocks += ARM_OFFSET_BLOCKS;
+        }
+        return hopTicks(blocks);
     }
 
     /** Items wandering through plain pipe, outside the planned network. */
@@ -254,11 +264,88 @@ public final class PipeNetwork {
      * previous restock is still in transit.
      */
     public int inboundTo(BlockPos dest, ItemResource item) {
-        return CraftJobManager.inboundTo(this, dest, item);
+        return CraftJobManager.inboundTo(this, PipeNodeId.of(level, dest), item);
+    }
+
+    /**
+     * Items of {@code item} currently flying on this network toward {@code dest}, including
+     * parcels still staging for a cross-dim handoff whose final destination is {@code dest}.
+     */
+    int flyingItemsToward(PipeNodeId dest, ItemResource item) {
+        if (item.isEmpty()) {
+            return 0;
+        }
+        int flying = 0;
+        for (Parcel<BlockPos, ItemShipment> parcel : parcels.parcels()) {
+            if (!parcel.payload().resource().equals(item)) {
+                continue;
+            }
+            CrossDimTrip trip = itemCrossTrips.get(parcel.id());
+            if (trip != null) {
+                if (trip.finalDest().equals(dest)) {
+                    flying += parcel.payload().count();
+                }
+                continue;
+            }
+            if (dest.dimension().equals(level.dimension())
+                    && parcel.destination().equals(dest.pos())) {
+                flying += parcel.payload().count();
+            }
+        }
+        return flying;
+    }
+
+    ServerLevel level() {
+        return level;
+    }
+
+    /**
+     * Cancels flying item parcels headed for {@code dest} (local destination or cross-dim
+     * {@code finalDest}). Invokes {@code onCancel} with the node the parcel was at and the
+     * cancelled shipment so the caller can reclaim.
+     */
+    void cancelParcelsToward(PipeNodeId dest,
+                             ItemResource item,
+                             java.util.function.BiConsumer<BlockPos, ItemShipment> onCancel) {
+        List<Parcel<BlockPos, ItemShipment>> flying = new ArrayList<>();
+        for (Parcel<BlockPos, ItemShipment> parcel : parcels.parcels()) {
+            if (item != null && !item.isEmpty() && !parcel.payload().resource().equals(item)) {
+                continue;
+            }
+            CrossDimTrip trip = itemCrossTrips.get(parcel.id());
+            if (trip != null) {
+                if (trip.finalDest().equals(dest)) {
+                    flying.add(parcel);
+                }
+                continue;
+            }
+            if (dest.dimension().equals(level.dimension())
+                    && parcel.destination().equals(dest.pos())) {
+                flying.add(parcel);
+            }
+        }
+        for (Parcel<BlockPos, ItemShipment> parcel : flying) {
+            BlockPos at = parcel.atNode();
+            parcels.cancel(parcel.id()).ifPresent(shipment -> {
+                itemCrossTrips.remove(parcel.id());
+                onCancel.accept(at, shipment);
+            });
+        }
+    }
+
+    /** Cancels every flying item parcel headed for {@code dest}, any item. */
+    void cancelParcelsToward(PipeNodeId dest,
+                             java.util.function.BiConsumer<BlockPos, ItemShipment> onCancel) {
+        cancelParcelsToward(dest, ItemResource.EMPTY, onCancel);
     }
 
     public static synchronized PipeNetwork get(ServerLevel level) {
         return INSTANCES.computeIfAbsent(level, PipeNetwork::new);
+    }
+
+    /** Live per-level instances (does not create empty networks). */
+    public static synchronized List<PipeNetwork> instances() {
+        return List.copyOf(INSTANCES.values());
     }
 
     /** Drops the network for a level that is unloading. */
@@ -275,6 +362,14 @@ public final class PipeNetwork {
 
     public RoutingSnapshot<BlockPos> routes() {
         return cache.current();
+    }
+
+    /**
+     * Last physical lattice from a rebuild (includes same-dim link edges, before corridor
+     * collapse). Empty until the first successful rebuild for this level.
+     */
+    public Topology<BlockPos> physicalLattice() {
+        return lastLattice;
     }
 
     public long revision() {
@@ -316,12 +411,18 @@ public final class PipeNetwork {
         }
 
         craftJobs.tick(level, this);
-        sendQueue.tick(level, ledger, parcels, cache.current());
-        energySendQueue.tick(level, energyLedger, energyParcels, cache.current());
-        fluidSendQueue.tick(level, fluidLedger, fluidParcels, cache.current());
-        RequestService.handle(level, this, parcels.tick(cache.current()));
-        EnergyRequestService.handle(level, this, energyParcels.tick(cache.current()));
-        FluidRequestService.handle(level, this, fluidParcels.tick(cache.current()));
+        sendQueue.tick(level, this, ledger, parcels, cache.current());
+        energySendQueue.tick(level, this, energyLedger, energyParcels, cache.current());
+        fluidSendQueue.tick(level, this, fluidLedger, fluidParcels, cache.current());
+        handoffCompletingWormholes(parcels, itemCrossTrips, this::acceptItemHandoff);
+        handoffCompletingWormholes(energyParcels, energyCrossTrips, this::acceptEnergyHandoff);
+        handoffCompletingWormholes(fluidParcels, fluidCrossTrips, this::acceptFluidHandoff);
+        RequestService.handle(level, this,
+                promoteStagingDeliveries(parcels.tick(cache.current()), parcels, itemCrossTrips));
+        EnergyRequestService.handle(level, this,
+                promoteStagingDeliveries(energyParcels.tick(cache.current()), energyParcels, energyCrossTrips));
+        FluidRequestService.handle(level, this,
+                promoteStagingDeliveries(fluidParcels.tick(cache.current()), fluidParcels, fluidCrossTrips));
         drift.tick(this);
         syncParcels();
         if (level.getGameTime() % 10 == 0) {
@@ -338,7 +439,7 @@ public final class PipeNetwork {
     /**
      * Pushes the current in-flight parcels to every player in this dimension.
      *
-     * <p>Full replace each tick while anything is moving  -  fine for debug volumes.
+     * <p>Full replace each tick while anything is moving - fine for debug volumes.
      * Sends one empty snapshot when the last parcel settles so clients clear leftovers.
      */
     /** How often the craft debug overlay refreshes. Text does not need per-tick updates. */
@@ -393,8 +494,8 @@ public final class PipeNetwork {
             //
             // The entry arm is the one the shipment recorded when it was pulled, not
             // whichever container happens to sit next to the origin. Guessing meant a
-            // parcel handed over by a drifting item  -  which came in through pipe and
-            // touched no container at all  -  started in some unrelated chest's arm and
+            // parcel handed over by a drifting item - which came in through pipe and
+            // touched no container at all - started in some unrelated chest's arm and
             // visibly jumped sideways to the pipe centre before setting off.
             Optional<net.minecraft.core.Direction> enterFrom =
                     parcel.atNode().equals(parcel.origin())
@@ -416,14 +517,15 @@ public final class PipeNetwork {
                     enterFrom,
                     exitTo,
                     true,
-                    ParcelSyncPayload.Entry.NO_TIER));
+                    ParcelSyncPayload.Entry.NO_TIER,
+                    linkHopFor(parcel)));
         }
         // Energy parcels ride the same sync, on the same shared routing graph as items,
         // just tagged into a disjoint id range so they never collide with an item parcel's
         // id in the client's single visuals map (see ENERGY_ID_TAG).
         for (Parcel<BlockPos, EnergyShipment> parcel : energyParcels.parcels()) {
             EnergyShipment shipment = parcel.payload();
-            ItemStack stack = new ItemStack(ModItems.ENERGY_PARCEL.get());
+            ItemStack stack = new ItemStack(ModItems.energyParcel(shipment.tier()));
             if (stack.isEmpty()) {
                 continue;
             }
@@ -446,13 +548,14 @@ public final class PipeNetwork {
                     enterFrom,
                     exitTo,
                     true,
-                    shipment.tier().wireId()));
+                    shipment.tier().wireId(),
+                    linkHopFor(parcel)));
         }
         // Fluid parcels, same reasoning as energy above but with their own id range
         // (FLUID_ID_TAG) so neither collides with the other or with items/drift.
         for (Parcel<BlockPos, FluidShipment> parcel : fluidParcels.parcels()) {
             FluidShipment shipment = parcel.payload();
-            ItemStack stack = new ItemStack(ModItems.FLUID_PARCEL.get());
+            ItemStack stack = new ItemStack(ModItems.fluidParcel(shipment.tier()));
             if (stack.isEmpty()) {
                 continue;
             }
@@ -475,7 +578,8 @@ public final class PipeNetwork {
                     enterFrom,
                     exitTo,
                     true,
-                    shipment.tier().wireId()));
+                    shipment.tier().wireId(),
+                    linkHopFor(parcel)));
         }
         // Drifting items ride the same sync so they draw like anything else in a pipe.
         // ticksIntoHop is the raw drift clock (longer than routed); the client uses
@@ -516,11 +620,326 @@ public final class PipeNetwork {
                     pushedIn,
                     Optional.ofNullable(drifting.exitTo()),
                     false,
-                    ParcelSyncPayload.Entry.NO_TIER));
+                    ParcelSyncPayload.Entry.NO_TIER,
+                    false));
         }
 
         PacketDistributor.sendToPlayersInDimension(
                 level, new ParcelSyncPayload(TICKS_PER_HOP, gameTime, entries));
+    }
+
+    private static boolean linkHopFor(Parcel<BlockPos, ?> parcel) {
+        BlockPos next = parcel.nextHop();
+        return next != null && ParcelSyncPayload.isLinkHop(parcel.atNode(), next);
+    }
+
+    /**
+     * Injects a parcel headed for {@code to}, staging through a link when {@code to} is in
+     * another dimension.
+     */
+    public Optional<Long> injectItemToward(ItemShipment shipment, BlockPos from, PipeNodeId to) {
+        return injectToward(parcels, itemCrossTrips, shipment, from, to);
+    }
+
+    public Optional<Long> injectEnergyToward(EnergyShipment shipment, BlockPos from, PipeNodeId to) {
+        return injectToward(energyParcels, energyCrossTrips, shipment, from, to);
+    }
+
+    public Optional<Long> injectFluidToward(FluidShipment shipment, BlockPos from, PipeNodeId to) {
+        return injectToward(fluidParcels, fluidCrossTrips, shipment, from, to);
+    }
+
+    private <P> Optional<Long> injectToward(ParcelTracker<BlockPos, P> tracker,
+                                            Map<Long, CrossDimTrip> trips,
+                                            P shipment,
+                                            BlockPos from,
+                                            PipeNodeId to) {
+        PipeNodeId fromId = PipeNodeId.of(level, from);
+        if (fromId.sameDimension(to)) {
+            return tracker.inject(shipment, from, to.pos(), cache.current());
+        }
+        Optional<PipeNodeId> staging = stagingLink(fromId, to);
+        if (staging.isEmpty()) {
+            return Optional.empty();
+        }
+        PipeNodeId link = staging.get();
+        Optional<PipeNodeId> peer = LinkPipeRegistry.get(level).peerOf(link);
+        if (peer.isEmpty() || peer.get().sameDimension(link)) {
+            return Optional.empty();
+        }
+        // Cross-dim next hop may not exist on the per-level snapshot alone (wormhole is
+        // outside the local lattice). Prefer LinkTransit so staging matches canDeliver.
+        if (fromId.equals(link)) {
+            Optional<Long> id = tracker.inject(shipment, from, link.pos(), cache.current());
+            id.ifPresent(parcelId -> trips.put(parcelId, new CrossDimTrip(to, peer.get(), false)));
+            return id;
+        }
+        Optional<PipeNodeId> hop = LinkTransit.nextHop(level, cache.current(), fromId, link);
+        if (hop.isEmpty() || !hop.get().sameDimension(fromId)) {
+            return Optional.empty();
+        }
+        Optional<Long> id = tracker.injectWithFirstHop(
+                shipment, from, link.pos(), hop.get().pos(), cache.current().revision());
+        id.ifPresent(parcelId -> trips.put(parcelId, new CrossDimTrip(to, peer.get(), false)));
+        return id;
+    }
+
+    /** Local link pipe on the path from {@code from} to a remote {@code to}. */
+    private Optional<PipeNodeId> stagingLink(PipeNodeId from, PipeNodeId to) {
+        PipeNodeId cursor = from;
+        for (int i = 0; i < MAX_NODES; i++) {
+            Optional<PipeNodeId> hop = LinkTransit.nextHop(level, cache.current(), cursor, to);
+            if (hop.isEmpty()) {
+                return Optional.empty();
+            }
+            PipeNodeId next = hop.get();
+            if (!next.sameDimension(cursor)) {
+                return Optional.of(cursor);
+            }
+            cursor = next;
+        }
+        return Optional.empty();
+    }
+
+    public boolean canDeliver(PipeNodeId from, PipeNodeId to) {
+        return LinkTransit.canReach(level, cache.current(), from, to);
+    }
+
+    /**
+     * Resolves a provider {@code source} that may sit across a live cross-dim link from
+     * {@code requester}.
+     */
+    public Optional<PipeNodeId> resolveSource(BlockPos requester, BlockPos source) {
+        if (cache.current().contains(source)) {
+            return Optional.of(PipeNodeId.of(level, source));
+        }
+        PipeNodeId req = PipeNodeId.of(level, requester);
+        for (RoutingSnapshot<PipeNodeId> bridge : CrossDimPipeGraph.bridges()) {
+            if (!bridge.contains(req)) {
+                continue;
+            }
+            for (PipeNodeId node : bridge.topology().nodes()) {
+                if (node.pos().equals(source)
+                        && !node.dimension().equals(level.dimension())
+                        && bridge.canReach(req, node)) {
+                    return Optional.of(node);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private void acceptItemHandoff(ItemShipment shipment, PipeNodeId at, PipeNodeId dest) {
+        ServerLevel atLevel = LinkPipeRegistry.levelOf(level.getServer(), at);
+        if (atLevel == null) {
+            InventoryAccess.insertOrDrop(level, at.pos(), shipment.resource(), shipment.count());
+            ledger.cancel(shipment.promiseId());
+            return;
+        }
+        if (atLevel != level) {
+            PipeNetwork.get(atLevel).acceptItemHandoff(shipment, at, dest);
+            return;
+        }
+        continueAfterHandoff(parcels, itemCrossTrips, shipment, at, dest);
+    }
+
+    private void acceptEnergyHandoff(EnergyShipment shipment, PipeNodeId at, PipeNodeId dest) {
+        ServerLevel atLevel = LinkPipeRegistry.levelOf(level.getServer(), at);
+        if (atLevel == null) {
+            energyLedger.cancel(shipment.promiseId());
+            return;
+        }
+        if (atLevel != level) {
+            PipeNetwork.get(atLevel).acceptEnergyHandoff(shipment, at, dest);
+            return;
+        }
+        continueAfterHandoff(energyParcels, energyCrossTrips, shipment, at, dest);
+    }
+
+    private void acceptFluidHandoff(FluidShipment shipment, PipeNodeId at, PipeNodeId dest) {
+        ServerLevel atLevel = LinkPipeRegistry.levelOf(level.getServer(), at);
+        if (atLevel == null) {
+            fluidLedger.cancel(shipment.promiseId());
+            return;
+        }
+        if (atLevel != level) {
+            PipeNetwork.get(atLevel).acceptFluidHandoff(shipment, at, dest);
+            return;
+        }
+        continueAfterHandoff(fluidParcels, fluidCrossTrips, shipment, at, dest);
+    }
+
+    private <P> void continueAfterHandoff(ParcelTracker<BlockPos, P> tracker,
+                                          Map<Long, CrossDimTrip> trips,
+                                          P shipment,
+                                          PipeNodeId at,
+                                          PipeNodeId dest) {
+        // Drop the source-side extract arm: that Direction is meaningless on the peer and
+        // makes the client animate out of the wrong face (looks like request↔link bounce).
+        P emerged = clearEntrySide(shipment);
+        if (at.equals(dest)) {
+            tracker.inject(emerged, at.pos(), dest.pos(), cache.current());
+            return;
+        }
+        if (!at.sameDimension(dest) || !at.dimension().equals(level.dimension())) {
+            // Still need another wormhole (chained links) - stage again.
+            injectToward(tracker, trips, emerged, at.pos(), dest);
+            return;
+        }
+        // Local routes only. LinkTransit / CrossDim must not choose the return wormhole as
+        // the first hop or the parcel bounces link ↔ neighbour forever.
+        Optional<BlockPos> onward = cache.current().nextHop(at.pos(), dest.pos());
+        if (onward.isEmpty() || !isCardinalNeighbour(at.pos(), onward.get()) || !isPipe(level, onward.get())) {
+            tracker.inject(emerged, at.pos(), dest.pos(), cache.current());
+            return;
+        }
+        tracker.injectWithFirstHop(
+                emerged, at.pos(), dest.pos(), onward.get(), cache.current().revision());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <P> P clearEntrySide(P shipment) {
+        if (shipment instanceof ItemShipment items) {
+            return (P) items.withoutEntrySide();
+        }
+        if (shipment instanceof EnergyShipment energy) {
+            return (P) energy.withoutEntrySide();
+        }
+        if (shipment instanceof FluidShipment fluid) {
+            return (P) fluid.withoutEntrySide();
+        }
+        return shipment;
+    }
+
+    private static boolean isCardinalNeighbour(BlockPos a, BlockPos b) {
+        return a.distManhattan(b) == 1;
+    }
+
+    @FunctionalInterface
+    private interface HandoffAccept<P> {
+        void accept(P shipment, PipeNodeId at, PipeNodeId dest);
+    }
+
+    private <P> void handoffCompletingWormholes(ParcelTracker<BlockPos, P> tracker,
+                                                Map<Long, CrossDimTrip> trips,
+                                                HandoffAccept<P> sink) {
+        // Legacy in-flight wormhole hops (source-tracker fake hops toward peer BlockPos).
+        // New cross-dim traffic hands off immediately in {@link #promoteStagingDeliveries}.
+        List<Long> done = new ArrayList<>();
+        for (Parcel<BlockPos, P> parcel : List.copyOf(tracker.parcels())) {
+            CrossDimTrip trip = trips.get(parcel.id());
+            if (trip == null || !trip.wormhole()) {
+                continue;
+            }
+            if (parcel.nextHop() == null || !parcel.nextHop().equals(trip.peer().pos())) {
+                continue;
+            }
+            if (parcel.ticksIntoHop() + 1 < parcel.ticksForHop()) {
+                continue;
+            }
+            Optional<P> payload = tracker.cancel(parcel.id());
+            done.add(parcel.id());
+            payload.ifPresent(p -> sink.accept(p, trip.peer(), trip.finalDest()));
+        }
+        done.forEach(trips::remove);
+    }
+
+    /**
+     * Staging deliveries that reached a cross-dim link mouth hand off into the peer
+     * dimension immediately. A fake BlockPos hop toward {@code peer.pos()} on the source
+     * tracker is unsafe: coordinates collide across dimensions and cardinally-adjacent
+     * peer coords look like a normal pipe hop, which desyncs clients and can bounce the
+     * parcel on the far side.
+     */
+    private <P> ParcelTracker.TickReport<BlockPos, P> promoteStagingDeliveries(
+            ParcelTracker.TickReport<BlockPos, P> report,
+            ParcelTracker<BlockPos, P> tracker,
+            Map<Long, CrossDimTrip> trips) {
+        if (report.delivered().isEmpty()) {
+            return report;
+        }
+        List<ParcelTracker.Delivery<BlockPos, P>> kept = new ArrayList<>();
+        for (ParcelTracker.Delivery<BlockPos, P> delivery : report.delivered()) {
+            CrossDimTrip trip = trips.get(delivery.id());
+            if (trip == null) {
+                kept.add(delivery);
+                continue;
+            }
+            trips.remove(delivery.id());
+            if (trip.wormhole()) {
+                // Should have been consumed by handoffCompletingWormholes; never insert
+                // into an inventory at the peer's BlockPos in the wrong dimension.
+                handoffStaging(tracker, delivery.payload(), trip);
+                continue;
+            }
+            handoffStaging(tracker, delivery.payload(), trip);
+        }
+        if (kept.size() == report.delivered().size()) {
+            return report;
+        }
+        return new ParcelTracker.TickReport<>(List.copyOf(kept), report.stranded());
+    }
+
+    private <P> void handoffStaging(ParcelTracker<BlockPos, P> tracker, P payload, CrossDimTrip trip) {
+        if (tracker == parcels) {
+            acceptItemHandoff((ItemShipment) payload, trip.peer(), trip.finalDest());
+        } else if (tracker == energyParcels) {
+            acceptEnergyHandoff((EnergyShipment) payload, trip.peer(), trip.finalDest());
+        } else {
+            acceptFluidHandoff((FluidShipment) payload, trip.peer(), trip.finalDest());
+        }
+    }
+
+    /**
+     * Settles an item promise on whichever level's ledger still holds it (cross-dim handoff
+     * delivers on the destination network while the promise was opened on the source).
+     */
+    public static synchronized void settleItemDelivery(long promiseId, int count) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.ledger.recordDelivery(promiseId, count).isPresent()) {
+                return;
+            }
+        }
+    }
+
+    public static synchronized void cancelItemPromise(long promiseId) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.ledger.cancel(promiseId).isPresent()) {
+                return;
+            }
+        }
+    }
+
+    public static synchronized void settleEnergyDelivery(long promiseId, int amountFe) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.energyLedger.recordDelivery(promiseId, amountFe).isPresent()) {
+                return;
+            }
+        }
+    }
+
+    public static synchronized void cancelEnergyPromise(long promiseId) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.energyLedger.cancel(promiseId).isPresent()) {
+                return;
+            }
+        }
+    }
+
+    public static synchronized void settleFluidDelivery(long promiseId, int amountMb) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.fluidLedger.recordDelivery(promiseId, amountMb).isPresent()) {
+                return;
+            }
+        }
+    }
+
+    public static synchronized void cancelFluidPromise(long promiseId) {
+        for (PipeNetwork network : INSTANCES.values()) {
+            if (network.fluidLedger.cancel(promiseId).isPresent()) {
+                return;
+            }
+        }
     }
 
     /**
@@ -614,7 +1033,7 @@ public final class PipeNetwork {
      * networks on its arms.
      *
      * <p>Publishing only the seed's component used to wipe every other network in the
-     * level on a single place/break, which stranded unrelated parcels  -  hence the merge.
+     * level on a single place/break, which stranded unrelated parcels - hence the merge.
      */
     private Topology<BlockPos> readPendingWorld() {
         Set<BlockPos> seeds;
@@ -645,10 +1064,34 @@ public final class PipeNetwork {
             absorbComponent(node, builder, covered);
         }
 
+        injectLinkEdges(builder);
         Topology<BlockPos> lattice = builder.build();
         lastLattice = lattice;
         lastSmart = Set.copyOf(smartNodes(lattice));
+        CrossDimPipeGraph.refreshAfterRebuild(level, lattice, lastSmart);
         return DirectCorridors.transitTopology(lattice, lastSmart);
+    }
+
+    /**
+     * Cost-1 virtual adjacencies for complete link-pipe pairs in this dimension.
+     * Cross-dimension pairs are handled by {@link CrossDimPipeGraph}.
+     */
+    private void injectLinkEdges(Topology.Builder<BlockPos> builder) {
+        LinkPipeRegistry registry = LinkPipeRegistry.get(level);
+        for (LinkPipeRegistry.PipePair pair : registry.completePairs()) {
+            if (!pair.a().sameDimension(pair.b())) {
+                continue;
+            }
+            if (!pair.a().dimension().equals(level.dimension())) {
+                continue;
+            }
+            if (!LinkPipeRegistry.bothLoaded(level.getServer(), pair.a(), pair.b())) {
+                continue;
+            }
+            builder.node(pair.a().pos());
+            builder.node(pair.b().pos());
+            builder.link(pair.a().pos(), pair.b().pos(), 1);
+        }
     }
 
     /** Scans the component containing {@code seed} into {@code builder}. */
@@ -690,7 +1133,12 @@ public final class PipeNetwork {
     private Set<BlockPos> smartNodes(Topology<BlockPos> lattice) {
         Set<BlockPos> smart = new HashSet<>();
         for (BlockPos pos : lattice.nodes()) {
-            if (PipeBlock.isSmartPipe(level.getBlockState(pos).getBlock())) {
+            Block block = level.getBlockState(pos).getBlock();
+            // Link mouths are corridor endpoints so a cross-dim wormhole (no local virtual
+            // edge) is still reachable for staging parcels and arm marks. Same-dim pairs
+            // already get a degree-2 virtual edge; treating the mouth as smart still
+            // routes BasicA → Link → peer Link → BasicB correctly.
+            if (PipeBlock.isSmartPipe(block) || block instanceof LinkPipeBlock) {
                 smart.add(pos);
             }
         }

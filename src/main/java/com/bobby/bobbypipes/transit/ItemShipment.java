@@ -33,6 +33,11 @@ public record ItemShipment(ItemResource resource, int count, long promiseId,
         this(resource, count, promiseId, null);
     }
 
+    /** Cleared when a shipment re-enters the network at a cross-dim link mouth. */
+    public ItemShipment withoutEntrySide() {
+        return entrySide == null ? this : new ItemShipment(resource, count, promiseId, null);
+    }
+
     @Override
     public String toString() {
         return count + "x " + resource + " (promise " + promiseId + ")";

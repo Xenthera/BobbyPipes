@@ -1,8 +1,10 @@
 package com.bobby.bobbypipes.client;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.client.screen.LinkPipeScreen;
 import com.bobby.bobbypipes.client.screen.AutocraftMonitorScreen;
 import com.bobby.bobbypipes.client.screen.BasicPipeScreen;
+import com.bobby.bobbypipes.client.screen.ChunkLoaderScreen;
 import com.bobby.bobbypipes.client.screen.CraftingPipeScreen;
 import com.bobby.bobbypipes.client.screen.EnergyRequestScreen;
 import com.bobby.bobbypipes.client.screen.EnergySupplierPipeScreen;
@@ -20,6 +22,7 @@ import com.bobby.bobbypipes.network.payload.FluidStockPayload;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
 import com.bobby.bobbypipes.network.payload.PatternTableSyncPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
+import com.bobby.bobbypipes.network.payload.LinkChannelResultPayload;
 import com.bobby.bobbypipes.network.payload.SatelliteListPayload;
 import com.bobby.bobbypipes.network.payload.SatelliteNameResultPayload;
 import com.bobby.bobbypipes.registry.ModMenus;
@@ -48,8 +51,10 @@ public final class ClientMenus {
         event.register(ModMenus.PATTERN_TABLE.get(), PatternTableScreen::new);
         event.register(ModMenus.CRAFTING_PIPE.get(), CraftingPipeScreen::new);
         event.register(ModMenus.SATELLITE_PIPE.get(), SatellitePipeScreen::new);
+        event.register(ModMenus.LINK_PIPE.get(), LinkPipeScreen::new);
         event.register(ModMenus.SUPPLIER_PIPE.get(), SupplierPipeScreen::new);
         event.register(ModMenus.AUTOCRAFT_MONITOR.get(), AutocraftMonitorScreen::new);
+        event.register(ModMenus.CHUNK_LOADER.get(), ChunkLoaderScreen::new);
     }
 
     @SubscribeEvent
@@ -59,6 +64,7 @@ public final class ClientMenus {
         event.register(FluidStockPayload.TYPE, ClientFluidRequestGui::handleStock);
         event.register(RequestResultPayload.TYPE, ClientRequestGui::handleResult);
         event.register(SatelliteNameResultPayload.TYPE, SatelliteNameResultPayload::handle);
+        event.register(LinkChannelResultPayload.TYPE, LinkChannelResultPayload::handle);
         event.register(SatelliteListPayload.TYPE, SatelliteListPayload::handle);
         event.register(PatternTableSyncPayload.TYPE, PatternTableSyncPayload::handle);
         event.register(CraftingPipeSyncPayload.TYPE, CraftingPipeSyncPayload::handle);

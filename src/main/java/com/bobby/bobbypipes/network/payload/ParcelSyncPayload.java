@@ -48,18 +48,13 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
      * One parcel's render-relevant state.
      *
      * @param next        empty when the parcel is stuck or delivering in place
-     * @param ticksForHop how long this specific hop actually takes on the server  -
-     *                    authoritative, sent directly rather than left for the client to
-     *                    guess from {@code enterFrom}/{@code exitTo}, so there is nothing
-     *                    for the render clock to independently compute and fall out of
-     *                    step with what the server is really doing
+     * @param ticksForHop how long this specific hop actually takes on the server
      * @param routed      true for logistics parcels (draw the pipe cage); false for
      *                    drifting items in plain pipe
      * @param tier        parcel density as {@link com.bobby.bobbypipes.transit.ParcelTier#wireId()},
-     *                    or 0 for items and drift, which have no tier. Energy and fluid
-     *                    parcels all draw the same one-item model, so without this a packet
-     *                    carrying a million FE and one carrying a thousand are pixel
-     *                    identical in the pipe; the renderer sizes them by this instead.
+     *                    or 0 for items and drift
+     * @param linkHop     true when this hop crosses a link-pipe wormhole (non-adjacent
+     *                    centres): client holds at the entrance then appears at the peer
      */
     public record Entry(
             long id,
@@ -71,7 +66,8 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
             Optional<Direction> enterFrom,
             Optional<Direction> exitTo,
             boolean routed,
-            int tier) {
+            int tier,
+            boolean linkHop) {
 
         public static final StreamCodec<RegistryFriendlyByteBuf, Entry> STREAM_CODEC =
                 StreamCodec.composite(
@@ -84,12 +80,19 @@ public record ParcelSyncPayload(int ticksPerHop, long gameTime, List<Entry> parc
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::enterFrom,
                         ByteBufCodecs.optional(Direction.STREAM_CODEC), Entry::exitTo,
                         ByteBufCodecs.BOOL, Entry::routed,
-                        // VAR_INT rather than BYTE: the value is only ever 0-3, so it costs
-                        // the same one byte on the wire, and the field stays a plain int.
                         ByteBufCodecs.VAR_INT, Entry::tier,
+                        ByteBufCodecs.BOOL, Entry::linkHop,
                         Entry::new);
 
         /** Untiered: items and drifting items, which ship by the stack. */
         public static final int NO_TIER = 0;
+    }
+
+    /** True when {@code at} and {@code next} are not cardinally adjacent (link wormhole). */
+    public static boolean isLinkHop(BlockPos at, BlockPos next) {
+        int dx = Math.abs(at.getX() - next.getX());
+        int dy = Math.abs(at.getY() - next.getY());
+        int dz = Math.abs(at.getZ() - next.getZ());
+        return dx + dy + dz != 1;
     }
 }

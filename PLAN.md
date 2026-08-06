@@ -269,7 +269,7 @@ Item models in the world, held-item rendering and the guidebook.
 - [x] Passive supplier pipe - the same targets as a sink rather than a requester, see Phase 6
 - [ ] Chassis pipe with one module slot
 - [ ] Item Sink module (routes matching items to an inventory, using the Phase 3 filter)
-- [x] Default route  -  Basic pipe GUI checkbox; space-aware excess sink
+- [x] Default route - Basic pipe GUI checkbox; space-aware excess sink
 - [x] `SinkFinder` - one answer to "where does an item with no destination go", used by
       drift, hopper intake and craft surplus alike. Passive suppliers outrank default
       routes, cheapest route wins within a tier, and a sink takes only what it is short by
@@ -300,7 +300,7 @@ Everything below is breadth.
       drift, hopper intake and craft surplus all pick it up at once.
 - [ ] **Pipe and module types -> datapack-driven**
 - [ ] Security / permissions
-- [~] Integrations  -  optional JEI recipe transfer into pattern ghosts; fuller JEI later
+- [~] Integrations - optional JEI recipe transfer into pattern ghosts; fuller JEI later
 
 The three big ones below are the bulk of what is left. Each is a phase in its own right.
 
@@ -321,10 +321,10 @@ explain. Machines from every other mod can feed it directly.
       cheapest reachable power block, the same ordering the request planner already uses,
       so `RouteTable.destinationsByCost` does the work again.
 - [ ] **Per-pipe draw.** Cost is per action, not per tick, so an idle network is free:
-      - provider extract and request delivery charge per parcel dispatched
-      - crafting pipes charge per craft started
-      - supplier and passive supplier charge per restock parcel
-      - basic and plain pipe are free; they are fabric, not actors
+ - provider extract and request delivery charge per parcel dispatched
+ - crafting pipes charge per craft started
+ - supplier and passive supplier charge per restock parcel
+ - basic and plain pipe are free; they are fabric, not actors
 - [ ] Brownout behaviour. Out of power is a stall, never a loss: a pipe that cannot pay
       does not act this tick and retries, and no parcel or promise is dropped for it.
 - [ ] Power GUI on the block: buffer level, draw rate, and which pipes are drawing.

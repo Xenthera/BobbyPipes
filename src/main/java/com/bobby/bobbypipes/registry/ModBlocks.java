@@ -1,8 +1,10 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.block.LinkPipeBlock;
 import com.bobby.bobbypipes.block.AutocraftMonitorBlock;
 import com.bobby.bobbypipes.block.BasicPipeBlock;
+import com.bobby.bobbypipes.block.ChunkLoaderBlock;
 import com.bobby.bobbypipes.block.CraftingPipeBlock;
 import com.bobby.bobbypipes.block.EnergyProviderPipeBlock;
 import com.bobby.bobbypipes.block.EnergyRequestPipeBlock;
@@ -31,9 +33,19 @@ public final class ModBlocks {
 
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(BobbyPipes.MOD_ID);
 
-    /** Unrouted transport tube. Corridor fabric only  -  never a routing node. */
+    /** Unrouted transport tube. Corridor fabric only - never a routing node. */
     public static final DeferredBlock<PipeBlock> PIPE = registerWithItem("pipe",
             props -> new PipeBlock(props
+                    .strength(0.3f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    /**
+     * Pairable wormhole fabric. Same corridor role as {@link #PIPE}, plus a channel that
+     * inserts a cost-1 virtual edge to its peer (same or other dimension).
+     */
+    public static final DeferredBlock<LinkPipeBlock> LINK_PIPE = registerWithItem("link_pipe",
+            props -> new LinkPipeBlock(props
                     .strength(0.3f)
                     .sound(SoundType.METAL)
                     .noOcclusion()));
@@ -141,6 +153,12 @@ public final class ModBlocks {
     /** Scrollable view of the autocraft queue; place next to a smart pipe. */
     public static final DeferredBlock<AutocraftMonitorBlock> AUTOCRAFT_MONITOR =
             registerWithItem("autocraft_monitor", props -> new AutocraftMonitorBlock(props
+                    .strength(2.5f)
+                    .sound(SoundType.METAL)));
+
+    /** Creative-only chunk force-loader. No recipe. */
+    public static final DeferredBlock<ChunkLoaderBlock> CHUNK_LOADER =
+            registerWithItem("chunk_loader", props -> new ChunkLoaderBlock(props
                     .strength(2.5f)
                     .sound(SoundType.METAL)));
 

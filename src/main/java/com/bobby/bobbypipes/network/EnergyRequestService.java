@@ -89,8 +89,8 @@ public final class EnergyRequestService {
             // will never hand over, and queueing against that just drops the job silently
             // on the next pulse.
             int available = EnergyAccess.extractable(level, provider, remaining, ownStorages)
-                    - network.energySendQueue().queued(provider)
-                    - SupplierReserves.reservedFe(level, provider);
+ - network.energySendQueue().queued(provider)
+ - SupplierReserves.reservedFe(level, provider);
             if (available <= 0) {
                 continue;
             }
@@ -124,8 +124,8 @@ public final class EnergyRequestService {
             // Same exclusion as request: energy this pipe would only be shipping to itself
             // is not energy the network can give it.
             total += Math.max(0, EnergyAccess.extractable(level, provider, Integer.MAX_VALUE, ownStorages)
-                    - network.energySendQueue().queued(provider)
-                    - SupplierReserves.reservedFe(level, provider));
+ - network.energySendQueue().queued(provider)
+ - SupplierReserves.reservedFe(level, provider));
         }
         return total;
     }
@@ -187,13 +187,13 @@ public final class EnergyRequestService {
 
         for (ParcelTracker.Delivery<BlockPos, EnergyShipment> delivery : report.delivered()) {
             EnergyShipment shipment = delivery.payload();
-            network.energyLedger().recordDelivery(shipment.promiseId(), shipment.amountFe());
+            PipeNetwork.settleEnergyDelivery(shipment.promiseId(), shipment.amountFe());
             EnergyAccess.insert(level, delivery.destination(), shipment.amountFe());
         }
 
         for (ParcelTracker.Stranded<BlockPos, EnergyShipment> stranded : report.stranded()) {
             EnergyShipment shipment = stranded.payload();
-            network.energyLedger().cancel(shipment.promiseId());
+            PipeNetwork.cancelEnergyPromise(shipment.promiseId());
         }
     }
 }

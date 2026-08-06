@@ -21,6 +21,11 @@ import net.neoforged.neoforge.transfer.fluid.FluidResource;
  *
  * <p>Reserving the target makes the fixed point stable instead: once a storage holds its
  * target, its Provider offers nothing, so nothing drains it, so its Supplier stops asking.
+ *
+ * <p>The floor only applies when that Supplier and this Provider sit on the <em>same</em>
+ * routed component. A Supplier on one network and a Provider on another that happen to
+ * share a battery are not in a cycle with each other: the Provider may export freely and
+ * the Supplier may restock from its own network without those rules interfering.
  */
 public final class SupplierReserves {
 
@@ -35,12 +40,14 @@ public final class SupplierReserves {
      * larger of the two, not both added together.
      */
     public static int reservedFe(ServerLevel level, BlockPos providerPipe) {
+        RoutingSnapshot<BlockPos> routes = PipeNetwork.get(level).routes();
         int reserved = 0;
         for (BlockPos storage : EnergyAccess.attachedStorages(level, providerPipe)) {
             int highest = 0;
             for (Direction direction : Direction.values()) {
-                if (blockEntityAt(level, storage.relative(direction))
-                        instanceof EnergySupplierPipeBlockEntity supplier) {
+                BlockPos neighbour = storage.relative(direction);
+                if (blockEntityAt(level, neighbour) instanceof EnergySupplierPipeBlockEntity supplier
+                        && sameNetwork(routes, providerPipe, neighbour)) {
                     highest = Math.max(highest, supplier.targetFe());
                 }
             }
@@ -58,19 +65,31 @@ public final class SupplierReserves {
         if (fluid.isEmpty()) {
             return 0;
         }
+        RoutingSnapshot<BlockPos> routes = PipeNetwork.get(level).routes();
         int reserved = 0;
         for (BlockPos tank : FluidAccess.attachedTanks(level, providerPipe)) {
             int highest = 0;
             for (Direction direction : Direction.values()) {
-                if (blockEntityAt(level, tank.relative(direction))
-                        instanceof FluidSupplierPipeBlockEntity supplier
-                        && fluid.equals(supplier.targetFluid())) {
+                BlockPos neighbour = tank.relative(direction);
+                if (blockEntityAt(level, neighbour) instanceof FluidSupplierPipeBlockEntity supplier
+                        && fluid.equals(supplier.targetFluid())
+                        && sameNetwork(routes, providerPipe, neighbour)) {
                     highest = Math.max(highest, supplier.targetMb());
                 }
             }
             reserved += highest;
         }
         return reserved;
+    }
+
+    /**
+     * True when both pipes are on the same connected component of the current routing
+     * snapshot. Missing either end means they cannot cycle through this network.
+     */
+    private static boolean sameNetwork(RoutingSnapshot<BlockPos> routes,
+                                       BlockPos providerPipe,
+                                       BlockPos supplierPipe) {
+        return routes.topology().componentOf(providerPipe).contains(supplierPipe);
     }
 
     private static BlockEntity blockEntityAt(ServerLevel level, BlockPos pos) {

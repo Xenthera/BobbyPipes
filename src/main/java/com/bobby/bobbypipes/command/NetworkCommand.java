@@ -4,6 +4,7 @@ import com.bobby.bobbypipes.network.EnergyAccess;
 import com.bobby.bobbypipes.network.EnergyKind;
 import com.bobby.bobbypipes.network.EnergyRequestService;
 import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.network.PipeNodeId;
 import com.bobby.bobbypipes.network.RouteTable;
 import com.bobby.bobbypipes.network.RequestService;
 import com.bobby.bobbypipes.network.RoutingSnapshot;
@@ -148,13 +149,14 @@ public final class NetworkCommand {
             return 0;
         }
 
-        RequestPlan<BlockPos, ItemResource> plan = outcome.plan();
+        RequestPlan<PipeNodeId, ItemResource> plan = outcome.plan();
         reply(context, "Request " + count + " " + itemId + " at " + format(at) + ":");
         if (plan.withdrawals().isEmpty()) {
             reply(context, "  nothing found on the network");
         }
-        for (RequestPlan.Withdrawal<BlockPos, ItemResource> withdrawal : plan.withdrawals()) {
-            reply(context, "  take " + withdrawal.amount() + " via pipe " + format(withdrawal.source()));
+        for (RequestPlan.Withdrawal<PipeNodeId, ItemResource> withdrawal : plan.withdrawals()) {
+            reply(context, "  take " + withdrawal.amount() + " via pipe "
+                    + format(withdrawal.source().pos()));
         }
         if (plan.isComplete()) {
             reply(context, "  plan is complete");

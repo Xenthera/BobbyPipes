@@ -85,9 +85,9 @@ public class EnergySupplierPipeBlockEntity extends BlockEntity implements MenuPr
         // battery that meant re-ordering the target once a second for as long as parcels
         // were in transit, charging the storage far past the number that was set.
         int need = targetFe
-                - EnergyAccess.count(level, worldPosition)
-                - network.energySendQueue().queuedTo(worldPosition)
-                - network.energyLedger().inbound(worldPosition, EnergyKind.ENERGY);
+ - EnergyAccess.count(level, worldPosition)
+ - network.energySendQueue().queuedTo(worldPosition)
+ - network.energyLedger().inbound(worldPosition, EnergyKind.ENERGY);
         if (need <= 0) {
             return;
         }

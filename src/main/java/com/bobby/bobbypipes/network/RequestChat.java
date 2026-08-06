@@ -25,7 +25,7 @@ public final class RequestChat {
                 "chat.bobbypipes.request.item",
                 item.toStack(1).getHoverName(),
                 requested);
-        line.append(Component.literal(" — "));
+        line.append(Component.literal(" - "));
         line.append(result(shipped, requested));
         player.sendSystemMessage(line);
     }
@@ -38,7 +38,7 @@ public final class RequestChat {
                 "chat.bobbypipes.request.fluid",
                 requestedMb,
                 fluid.getFluidType().getDescription());
-        line.append(Component.literal(" — "));
+        line.append(Component.literal(" - "));
         line.append(result(shippedMb, requestedMb));
         player.sendSystemMessage(line);
     }
@@ -48,7 +48,7 @@ public final class RequestChat {
             return;
         }
         MutableComponent line = Component.translatable("chat.bobbypipes.request.energy", requestedFe);
-        line.append(Component.literal(" — "));
+        line.append(Component.literal(" - "));
         line.append(result(shippedFe, requestedFe));
         player.sendSystemMessage(line);
     }

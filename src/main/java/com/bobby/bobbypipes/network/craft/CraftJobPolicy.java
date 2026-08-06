@@ -9,7 +9,7 @@ import java.util.Optional;
  * Pure deliver-and-wait craft-job rules: inbound math, pull need, phase/arm transitions,
  * remaining-input need, and surplus split.
  *
- * <p>No world access  -  unit tests drive this with fake have/inbound/output counts.
+ * <p>No world access - unit tests drive this with fake have/inbound/output counts.
  */
 public final class CraftJobPolicy {
 
@@ -52,7 +52,7 @@ public final class CraftJobPolicy {
      * How many runs worth of ingredients to aim for in buffers this gather.
      *
      * <p>Takes as many as will fit ({@code have + insertable}) without exceeding the job's
-     * remaining runs or {@code maxBatch}. Does not count inbound toward capacity  -  callers
+     * remaining runs or {@code maxBatch}. Does not count inbound toward capacity - callers
      * use {@link #pullNeed} so already-ordered parcels are not doubled.
      *
      * @param perRunNeeds merged per-run counts, one entry per buffer key
@@ -94,7 +94,7 @@ public final class CraftJobPolicy {
      *
      * <p>{@code moreComing} is the escape hatch: if the input buffer cannot support another
      * run right now, nothing more is going to appear until the next gather, so waiting any
-     * longer would only stall the job for no benefit  -  take what is ready instead.
+     * longer would only stall the job for no benefit - take what is ready instead.
      *
      * @param availableRuns runs' worth of result already sitting in the crafter
      * @param runsRemaining runs left on the job
@@ -174,7 +174,7 @@ public final class CraftJobPolicy {
      *   <li>Do not enter WAIT_OUTPUT from leftover/foreign output alone.</li>
      *   <li>Arm when {@code gatherComplete} (ingredients sitting in buffers).</li>
      *   <li>If this run already requested pulls ({@code requestedThisRun}) and output is
-     *       ready, treat as armed  -  covers pattern-table crafting before we observe
+     *       ready, treat as armed - covers pattern-table crafting before we observe
      *       gather-complete.</li>
      * </ul>
      *
@@ -198,7 +198,7 @@ public final class CraftJobPolicy {
      *
      * <p>When more runs remain and output for the next run is already in the buffer
      * (1 log -> 4 planks while the pattern counts 1/run), stay in {@link Phase#WAIT_OUTPUT}
-     * armed  -  do not gather another set of inputs. Otherwise leftover output alone at the
+     * armed - do not gather another set of inputs. Otherwise leftover output alone at the
      * start of a job still must not skip gather ({@link #onGatherTick}).
      *
      * @param runsRemainingAfter runs left after decrementing the completed one

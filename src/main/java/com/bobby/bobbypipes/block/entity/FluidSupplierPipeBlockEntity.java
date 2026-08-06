@@ -86,9 +86,9 @@ public class FluidSupplierPipeBlockEntity extends BlockEntity implements MenuPro
         // relying on it meant re-ordering the whole target on every scan while parcels were
         // still in transit and overfilling the tank far past the number that was set.
         int need = targetMb
-                - FluidAccess.count(level, worldPosition, targetFluid)
-                - network.fluidSendQueue().queuedTo(worldPosition, targetFluid)
-                - network.fluidLedger().inbound(worldPosition, targetFluid);
+ - FluidAccess.count(level, worldPosition, targetFluid)
+ - network.fluidSendQueue().queuedTo(worldPosition, targetFluid)
+ - network.fluidLedger().inbound(worldPosition, targetFluid);
         if (need <= 0) {
             return;
         }

@@ -1,6 +1,7 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.transit.ParcelTier;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -61,18 +62,44 @@ public final class ModItems {
             props -> new Item(props.stacksTo(1)));
 
     /**
-     * Client-only render stand-in for an energy parcel in transit. Not shown in the
-     * creative tab. Placeholder texture; a proper one comes later.
+     * Client-only render stand-ins for energy parcels in transit. Not shown in the creative
+     * tab. One item per {@link ParcelTier} so density reads as texture, not scale.
      */
     public static final DeferredItem<Item> ENERGY_PARCEL = ITEMS.registerItem("energy_parcel",
             props -> new Item(props.stacksTo(1)));
+    public static final DeferredItem<Item> ENERGY_PARCEL_DENSE =
+            ITEMS.registerItem("energy_parcel_dense", props -> new Item(props.stacksTo(1)));
+    public static final DeferredItem<Item> ENERGY_PARCEL_BULK =
+            ITEMS.registerItem("energy_parcel_bulk", props -> new Item(props.stacksTo(1)));
 
     /**
-     * Client-only render stand-in for a fluid parcel in transit. Not shown in the
-     * creative tab. Placeholder texture; a proper one comes later.
+     * Client-only render stand-ins for fluid parcels in transit. Not shown in the creative
+     * tab. One item per {@link ParcelTier}, same as energy.
      */
     public static final DeferredItem<Item> FLUID_PARCEL = ITEMS.registerItem("fluid_parcel",
             props -> new Item(props.stacksTo(1)));
+    public static final DeferredItem<Item> FLUID_PARCEL_DENSE =
+            ITEMS.registerItem("fluid_parcel_dense", props -> new Item(props.stacksTo(1)));
+    public static final DeferredItem<Item> FLUID_PARCEL_BULK =
+            ITEMS.registerItem("fluid_parcel_bulk", props -> new Item(props.stacksTo(1)));
+
+    /** Stand-in item for an energy parcel of the given density tier. */
+    public static Item energyParcel(ParcelTier tier) {
+        return switch (tier) {
+            case STANDARD -> ENERGY_PARCEL.get();
+            case DENSE -> ENERGY_PARCEL_DENSE.get();
+            case BULK -> ENERGY_PARCEL_BULK.get();
+        };
+    }
+
+    /** Stand-in item for a fluid parcel of the given density tier. */
+    public static Item fluidParcel(ParcelTier tier) {
+        return switch (tier) {
+            case STANDARD -> FLUID_PARCEL.get();
+            case DENSE -> FLUID_PARCEL_DENSE.get();
+            case BULK -> FLUID_PARCEL_BULK.get();
+        };
+    }
 
     private ModItems() {
     }

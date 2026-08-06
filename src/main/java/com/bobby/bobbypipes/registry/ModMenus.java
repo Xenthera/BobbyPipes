@@ -1,8 +1,10 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.menu.LinkPipeMenu;
 import com.bobby.bobbypipes.menu.AutocraftMonitorMenu;
 import com.bobby.bobbypipes.menu.BasicPipeMenu;
+import com.bobby.bobbypipes.menu.ChunkLoaderMenu;
 import com.bobby.bobbypipes.menu.CraftingPipeMenu;
 import com.bobby.bobbypipes.menu.EnergyRequestMenu;
 import com.bobby.bobbypipes.menu.EnergySupplierPipeMenu;
@@ -46,6 +48,9 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<SatellitePipeMenu>> SATELLITE_PIPE =
             MENUS.register("satellite_pipe", () -> IMenuTypeExtension.create(SatellitePipeMenu::new));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<LinkPipeMenu>> LINK_PIPE =
+            MENUS.register("link_pipe", () -> IMenuTypeExtension.create(LinkPipeMenu::new));
+
     public static final DeferredHolder<MenuType<?>, MenuType<SupplierPipeMenu>> SUPPLIER_PIPE =
             MENUS.register("supplier_pipe", () -> IMenuTypeExtension.create(SupplierPipeMenu::new));
 
@@ -60,6 +65,9 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<AutocraftMonitorMenu>> AUTOCRAFT_MONITOR =
             MENUS.register("autocraft_monitor", () -> IMenuTypeExtension.create(AutocraftMonitorMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<ChunkLoaderMenu>> CHUNK_LOADER =
+            MENUS.register("chunk_loader", () -> IMenuTypeExtension.create(ChunkLoaderMenu::new));
 
     private ModMenus() {
     }

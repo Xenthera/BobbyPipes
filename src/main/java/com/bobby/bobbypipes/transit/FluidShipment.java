@@ -28,6 +28,11 @@ public record FluidShipment(FluidResource resource, int amountMb, long promiseId
         this(resource, amountMb, promiseId, null);
     }
 
+    /** Cleared when a shipment re-enters the network at a cross-dim link mouth. */
+    public FluidShipment withoutEntrySide() {
+        return entrySide == null ? this : new FluidShipment(resource, amountMb, promiseId, null);
+    }
+
     /**
      * How dense this packet is, derived from {@link #amountMb} rather than stored. See
      * {@link ParcelTier}.

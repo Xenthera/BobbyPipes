@@ -20,7 +20,7 @@ import java.util.Optional;
  * <p>Parcels survive the network changing underneath them. Each one records the routing
  * revision its next hop was computed against; when that no longer matches the live
  * snapshot the parcel re-asks from wherever it currently sits. A parcel is stranded only
- * when its destination is no longer reachable from a still-valid perch  -  breaking an
+ * when its destination is no longer reachable from a still-valid perch - breaking an
  * unrelated spur must not eject transfers that can still finish their trip.
  *
  * @param <N> node identity
@@ -52,8 +52,8 @@ public final class ParcelTracker<N, P> {
      * How long one hop takes, given where it starts/ends and what it is carrying.
      *
      * <p>Almost every hop is the uniform base rate ({@link #ticksPerHop}), but a caller can
-     * make specific hops  -  typically the very first (leaving an origin inventory) or very
-     * last (arriving at the destination)  -  take longer, e.g. to cover the extra distance a
+     * make specific hops - typically the very first (leaving an origin inventory) or very
+     * last (arriving at the destination) - take longer, e.g. to cover the extra distance a
      * rendered container arm adds. Whatever this returns becomes the parcel's authoritative
      * timing for that hop; nothing downstream (server or client) recomputes it, so there is
      * nothing for a renderer to independently guess and fall out of sync with.
@@ -130,9 +130,31 @@ public final class ParcelTracker<N, P> {
         if (firstHop.isEmpty()) {
             return Optional.empty();
         }
+        return injectWithFirstHop(payload, from, to, firstHop.get(), routes.revision());
+    }
+
+    /**
+     * Injects with an already-chosen first hop, skipping the snapshot lookup.
+     *
+     * <p>Used for cross-dimension trips where the next node comes from
+     * {@code CrossDimPipeGraph} rather than the per-level {@link RoutingSnapshot}.
+     */
+    public Optional<Long> injectWithFirstHop(P payload, N from, N to, N firstHop, long revision) {
         long id = nextId++;
-        int ticks = hopTicks(from, firstHop.get(), from, to, payload);
-        parcels.put(id, new Parcel<>(id, payload, from, to, from, firstHop.get(), 0, ticks, routes.revision()));
+        int ticks = hopTicks(from, firstHop, from, to, payload);
+        parcels.put(id, new Parcel<>(id, payload, from, to, from, firstHop, 0, ticks, revision));
+        return Optional.of(id);
+    }
+
+    /**
+     * Places an in-flight parcel already sitting on {@code at}, moving toward {@code nextHop}
+     * with progress 0 (used after a cross-dimension link handoff).
+     */
+    public Optional<Long> injectContinuing(P payload, N at, N destination, N nextHop,
+                                           int ticksForHop, long revision) {
+        long id = nextId++;
+        int ticks = Math.max(1, ticksForHop);
+        parcels.put(id, new Parcel<>(id, payload, at, destination, at, nextHop, 0, ticks, revision));
         return Optional.of(id);
     }
 

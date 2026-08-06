@@ -35,6 +35,27 @@ Items move when you ask for them, not before. Built natively for NeoForge.
     side="BOTH"
 
 [[dependencies.${mod_id}]]
+    modId="jade"
+    type="optional"
+    versionRange="[26,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="ae2"
+    type="optional"
+    versionRange="[26,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="refinedstorage"
+    type="optional"
+    versionRange="[3,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
     modId="bobbycore"
     type="required"
     versionRange="[0.1.0,)"

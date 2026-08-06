@@ -23,7 +23,10 @@ import com.bobby.bobbypipes.network.payload.RequestSatelliteListPayload;
 import com.bobby.bobbypipes.network.payload.SatelliteListPayload;
 import com.bobby.bobbypipes.network.payload.SatelliteNameResultPayload;
 import com.bobby.bobbypipes.network.payload.SetCraftPatternPayload;
+import com.bobby.bobbypipes.network.payload.SetChunkLoaderSettingsPayload;
 import com.bobby.bobbypipes.network.payload.SetDefaultRoutePayload;
+import com.bobby.bobbypipes.network.payload.SetLinkChannelPayload;
+import com.bobby.bobbypipes.network.payload.LinkChannelResultPayload;
 import com.bobby.bobbypipes.network.payload.SetSatelliteNamePayload;
 import com.bobby.bobbypipes.network.payload.SetProviderSettingsPayload;
 import com.bobby.bobbypipes.network.payload.SetSupplierRequestsPayload;
@@ -51,6 +54,7 @@ public final class ModPayloads {
                 .playToClient(FluidStockPayload.TYPE, FluidStockPayload.STREAM_CODEC)
                 .playToClient(RequestResultPayload.TYPE, RequestResultPayload.STREAM_CODEC)
                 .playToClient(SatelliteNameResultPayload.TYPE, SatelliteNameResultPayload.STREAM_CODEC)
+                .playToClient(LinkChannelResultPayload.TYPE, LinkChannelResultPayload.STREAM_CODEC)
                 .playToClient(SatelliteListPayload.TYPE, SatelliteListPayload.STREAM_CODEC)
                 .playToClient(PatternTableSyncPayload.TYPE, PatternTableSyncPayload.STREAM_CODEC)
                 .playToClient(CraftingPipeSyncPayload.TYPE, CraftingPipeSyncPayload.STREAM_CODEC)
@@ -71,6 +75,8 @@ public final class ModPayloads {
                         ImportCraftPatternPayload::handle)
                 .playToServer(SetSatelliteNamePayload.TYPE, SetSatelliteNamePayload.STREAM_CODEC,
                         SetSatelliteNamePayload::handle)
+                .playToServer(SetLinkChannelPayload.TYPE, SetLinkChannelPayload.STREAM_CODEC,
+                        SetLinkChannelPayload::handle)
                 .playToServer(RequestSatelliteListPayload.TYPE, RequestSatelliteListPayload.STREAM_CODEC,
                         RequestSatelliteListPayload::handle)
                 .playToServer(SetDefaultRoutePayload.TYPE, SetDefaultRoutePayload.STREAM_CODEC,
@@ -81,6 +87,8 @@ public final class ModPayloads {
                         SetEnergySupplierTargetPayload::handle)
                 .playToServer(SetProviderSettingsPayload.TYPE, SetProviderSettingsPayload.STREAM_CODEC,
                         SetProviderSettingsPayload::handle)
+                .playToServer(SetChunkLoaderSettingsPayload.TYPE, SetChunkLoaderSettingsPayload.STREAM_CODEC,
+                        SetChunkLoaderSettingsPayload::handle)
                 .playToServer(CancelCraftJobPayload.TYPE, CancelCraftJobPayload.STREAM_CODEC,
                         CancelCraftJobPayload::handle);
     }

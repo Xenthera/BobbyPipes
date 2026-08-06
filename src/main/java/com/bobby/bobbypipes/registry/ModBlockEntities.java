@@ -1,8 +1,10 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
+import com.bobby.bobbypipes.block.entity.LinkPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.AutocraftMonitorBlockEntity;
 import com.bobby.bobbypipes.block.entity.BasicPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.ChunkLoaderBlockEntity;
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.EnergySupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.FluidSupplierPipeBlockEntity;
@@ -44,6 +46,10 @@ public final class ModBlockEntities {
             BLOCK_ENTITIES.register("satellite_pipe", () -> new BlockEntityType<>(
                     SatellitePipeBlockEntity::new, Set.of(ModBlocks.SATELLITE_PIPE.get())));
 
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LinkPipeBlockEntity>> LINK_PIPE =
+            BLOCK_ENTITIES.register("link_pipe", () -> new BlockEntityType<>(
+                    LinkPipeBlockEntity::new, Set.of(ModBlocks.LINK_PIPE.get())));
+
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SupplierPipeBlockEntity>> SUPPLIER_PIPE =
             BLOCK_ENTITIES.register("supplier_pipe", () -> new BlockEntityType<>(
                     SupplierPipeBlockEntity::new, Set.of(ModBlocks.SUPPLIER_PIPE.get())));
@@ -63,6 +69,10 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutocraftMonitorBlockEntity>> AUTOCRAFT_MONITOR =
             BLOCK_ENTITIES.register("autocraft_monitor", () -> new BlockEntityType<>(
                     AutocraftMonitorBlockEntity::new, Set.of(ModBlocks.AUTOCRAFT_MONITOR.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ChunkLoaderBlockEntity>> CHUNK_LOADER =
+            BLOCK_ENTITIES.register("chunk_loader", () -> new BlockEntityType<>(
+                    ChunkLoaderBlockEntity::new, Set.of(ModBlocks.CHUNK_LOADER.get())));
 
     private ModBlockEntities() {
     }

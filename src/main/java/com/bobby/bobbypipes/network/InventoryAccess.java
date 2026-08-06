@@ -305,7 +305,7 @@ public final class InventoryAccess {
                 }
                 accepted += handler.insert(item, wanted - accepted, transaction);
             }
-            // Roll back  -  this is a capacity probe only.
+            // Roll back - this is a capacity probe only.
         }
         return accepted;
     }

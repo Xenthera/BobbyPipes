@@ -22,8 +22,9 @@ package com.bobby.bobbypipes.transit;
  * bank has recovered by the next pulse, tiering down to DENSE and STANDARD as the source
  * runs dry. No splitting logic is needed for that, it falls out of asking the storage.
  *
- * <p>Tier is cosmetic. It changes how big the parcel draws and what the goggles say about
- * it; it does not gate which pipes a parcel may travel through, or how fast it moves.
+ * <p>Tier is cosmetic. It picks which parcel texture draws in the pipe and what the
+ * goggles say about it; it does not gate which pipes a parcel may travel through, or how
+ * fast it moves.
  */
 public enum ParcelTier {
 

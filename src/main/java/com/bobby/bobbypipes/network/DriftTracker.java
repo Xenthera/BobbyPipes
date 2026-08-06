@@ -76,7 +76,7 @@ public final class DriftTracker {
 
     /**
      * Extra distance a hop covers when it is pushed in from a real container (a hopper
-     * feeding a pipe) rather than picked up from another pipe  -  must match
+     * feeding a pipe) rather than picked up from another pipe - must match
      * {@code PipeNetwork.ARM_OFFSET_BLOCKS} / {@code ParcelDebugRenderer.ARM_OFFSET}, which
      * is what actually draws that entry arm on the client.
      */
@@ -92,7 +92,7 @@ public final class DriftTracker {
      * @param ticksForHop how many ticks the current hop takes; set once when the hop
      *                    begins, longer than {@link #TICKS_PER_HOP} only for the very
      *                    first hop off a real container, to cover the entry arm the
-     *                    client renders for it  -  authoritative, so the client has
+     *                    client renders for it - authoritative, so the client has
      *                    nothing left to guess and fall out of sync with.
      */
     public record Drifting(long id, ItemResource item, int count,
@@ -322,7 +322,7 @@ public final class DriftTracker {
      * Hop length for a pipe-to-pipe hop starting at {@code at}.
      *
      * <p>Longer only for the very first hop of a fresh item whose {@code cameFrom} side is
-     * a real container rather than more pipe  -  the same condition {@code PipeNetwork}
+     * a real container rather than more pipe - the same condition {@code PipeNetwork}
      * uses to decide whether to draw an entry arm, kept in lockstep with it so the extra
      * time always matches the extra distance actually rendered.
      */
@@ -373,7 +373,7 @@ public final class DriftTracker {
      * mark the player can see. One with no green arm at all has no peers: it is a router
      * on its own, and a lone router is not a network. Such a pipe must not pull a drifting
      * item off its random walk, which is what a default route somewhere across a junction
-     * of plain pipe was doing  -  the item was captured at the routed pipe and delivered
+     * of plain pipe was doing - the item was captured at the routed pipe and delivered
      * straight there, so it never reached the junction to branch at it.
      *
      * <p>Reading the block state rather than recomputing keeps this identical to the arm

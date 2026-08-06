@@ -28,6 +28,11 @@ public record EnergyShipment(int amountFe, long promiseId, Direction entrySide) 
         this(amountFe, promiseId, null);
     }
 
+    /** Cleared when a shipment re-enters the network at a cross-dim link mouth. */
+    public EnergyShipment withoutEntrySide() {
+        return entrySide == null ? this : new EnergyShipment(amountFe, promiseId, null);
+    }
+
     /**
      * How dense this packet is, derived from {@link #amountFe} rather than stored.
      *

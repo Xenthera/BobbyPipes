@@ -34,7 +34,7 @@ class DirectCorridorsTest {
         Set<DirectCorridors.Edge<String>> exits =
                 DirectCorridors.routedExits(lattice, Set.of("P", "R"));
 
-        // Only the routed exits are painted  -  not intermediate plain-pipe edges.
+        // Only the routed exits are painted - not intermediate plain-pipe edges.
         assertEquals(Set.of(
                 new DirectCorridors.Edge<>("P", "a"),
                 new DirectCorridors.Edge<>("R", "b")), exits);
@@ -49,7 +49,7 @@ class DirectCorridorsTest {
     @Test
     @DisplayName("a T-junction of plain pipes breaks the corridor")
     void junctionIsNotDirect() {
-        // P  -  a  -  b  -  R
+        // P - a - b - R
         //         |
         //         c
         Topology<String> lattice = Topology.<String>builder()
@@ -70,9 +70,9 @@ class DirectCorridorsTest {
     @Test
     @DisplayName("a basic router on a T-junction reconnects the arms")
     void basicOnJunctionReconnects() {
-        // P  -  a  -  B  -  R
+        // P - a - B - R
         //         |
-        //         c  -  S
+        //         c - S
         Topology<String> lattice = Topology.<String>builder()
                 .link("P", "a")
                 .link("a", "B")

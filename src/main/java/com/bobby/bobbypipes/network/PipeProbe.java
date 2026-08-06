@@ -103,8 +103,8 @@ public final class PipeProbe {
     /**
      * Energy and fluid parcels sitting on this pipe, with what each is carrying.
      *
-     * <p>Worth its own lines rather than folding into the item count above: these draw as
-     * one anonymous model, so the amount and tier are otherwise invisible in world, and
+     * <p>Worth its own lines rather than folding into the item count above: the in-pipe
+     * stand-in only shows density by texture, so the exact amount still needs text, and
      * seeing "3.4M FE T3" go past is the only way to confirm a big provider really is
      * releasing in bulk rather than trickling.
      */
@@ -236,7 +236,7 @@ public final class PipeProbe {
             if (lines.size() >= MAX_LINES || shown >= 5) {
                 int remaining = stock.size() - shown;
                 if (remaining > 0 && lines.size() < MAX_LINES) {
-                    lines.add("  … +" + remaining + " more type(s)");
+                    lines.add("  ... +" + remaining + " more type(s)");
                 }
                 break;
             }

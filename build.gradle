@@ -85,6 +85,14 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
+        // Second client for LAN / multiplayer testing (separate game dir + username).
+        client2 {
+            client()
+            gameDirectory = project.file('runs/client2')
+            programArguments.addAll '--username', (findProperty('dev_player_name_2') ?: 'BobbyPipes2').toString()
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
         server {
             server()
             programArgument '--nogui'
@@ -162,6 +170,18 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+
+    // Optional Jade (ex-WAILA): no separate API jar; full mod for compile + runClient.
+    compileOnly "maven.modrinth:jade:${jade_version}"
+    localRuntime "maven.modrinth:jade:${jade_version}"
+
+    // Optional AE2: API at compile time, full mod (+ GuideME transitive) for runClient.
+    compileOnly "org.appliedenergistics:appliedenergistics2:${ae2_version}:api"
+    localRuntime "org.appliedenergistics:appliedenergistics2:${ae2_version}"
+
+    // Optional Refined Storage (CurseMaven - no public NeoForge maven for 3.x yet).
+    compileOnly "curse.maven:refined-storage-243076:${refinedstorage_file}"
+    localRuntime "curse.maven:refined-storage-243076:${refinedstorage_file}"
 
     implementation "com.bobby.bobbycore:bobbycore:${bobbycore_version}"
 
@@ -270,6 +290,9 @@ On each machine (and the dedicated server, if any):
 
 JEI is included so the pattern-table "+" can paste ghost recipes.
 Keep the pattern table open, look up a crafting recipe in JEI, click "+".
+
+Jade, AE2, and Refined Storage are optional soft deps (same idea as JEI) for future
+network-bridge tooling; they are not required to play BobbyPipes.
 """.stripIndent()
 
 tasks.register('writeMpInstallNote') {
@@ -308,11 +331,16 @@ tasks.register('packageModZip', Zip) {
         }
     }
 
-    // Full JEI runtime jar (not the -api jars) so MP clients/servers get recipe transfer.
+    // Soft optional runtimes also useful when handing off a test pack.
     from(configurations.localRuntime) {
         into 'mods'
         include "jei-${minecraft_version}-neoforge-*.jar"
-        exclude '*-api-*.jar', '*-sources.jar'
+        include "Jade-*.jar", "jade-*.jar"
+        include "appliedenergistics2-*.jar"
+        include "guideme-*.jar"
+        include "refinedstorage-neoforge-*.jar"
+        include "refined-storage-243076-*.jar"
+        exclude '*-api-*.jar', '*-sources.jar', '*-javadoc.jar'
     }
 
     from(mpInstallNote)
@@ -323,7 +351,7 @@ tasks.register('packageModZip', Zip) {
 }
 
 // Fresh zip before launching so you can copy it while the game is running.
-['runClient', 'runServer'].each { runName ->
+['runClient', 'runClient2', 'runServer'].each { runName ->
     tasks.named(runName).configure {
         dependsOn tasks.named('packageModZip')
     }

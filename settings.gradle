@@ -8,13 +8,40 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// Optional sibling for runClient. Use canonical path so IDEA sync keys match on-disk casing.
-def bobbyChests = [file('../BobbyChests'), file('../bobbychests')].find { it.exists() }
-if (bobbyChests != null) {
-    includeBuild bobbyChests.canonicalFile
+// Resolve sibling Bobby mods from ../ relative to this project so a fresh machine
+// only needs the repos checked out next to each other - no mavenLocal publish step.
+def resolveSibling = { String propertyName, String envName, List<String> defaultNames ->
+    if (settings.hasProperty(propertyName)) {
+        return file(settings[propertyName] as String)
+    }
+    def fromEnv = System.getenv(envName)
+    if (fromEnv) {
+        return file(fromEnv)
+    }
+    return defaultNames.collect { file("../${it}") }.find { it.directory }
 }
 
-def bobbyCore = [file('../BobbyCore'), file('../bobbycore')].find { it.exists() }
-if (bobbyCore != null) {
-    includeBuild bobbyCore.canonicalFile
+def bobbyCore = resolveSibling('bobbycore.path', 'BOBBYCORE_PATH', ['BobbyCore', 'bobbycore'])
+if (bobbyCore != null && bobbyCore.directory) {
+    includeBuild(bobbyCore.canonicalFile) {
+        dependencySubstitution {
+            substitute module('com.bobby.bobbycore:bobbycore') using project(':')
+        }
+    }
+} else {
+    throw new GradleException(
+        "BobbyCore not found (expected ../BobbyCore). " +
+        "Clone https://github.com/Xenthera/BobbyCore.git as a sibling of this project, " +
+        "or pass -Pbobbycore.path=/path/to/BobbyCore / set BOBBYCORE_PATH."
+    )
+}
+
+// Optional: pipes-vs-chests testing in runClient (localRuntime only).
+def bobbyChests = resolveSibling('bobbychests.path', 'BOBBYCHESTS_PATH', ['BobbyChests', 'bobbychests'])
+if (bobbyChests != null && bobbyChests.directory) {
+    includeBuild(bobbyChests.canonicalFile) {
+        dependencySubstitution {
+            substitute module('com.bobby.bobbychests:bobbychests') using project(':')
+        }
+    }
 }

@@ -25,7 +25,7 @@ import net.minecraft.world.phys.BlockHitResult;
  * pipe is the exception, since it is used constantly and holds no configuration.
  *
  * <p>When a click opens a pipe screen, it consumes the interaction so the held item does
- * not also place (buckets, blocks, …). Sneak to use the held item on/against the pipe.
+ * not also place (buckets, blocks, ...). Sneak to use the held item on/against the pipe.
  */
 public class RoutedPipeBlock extends PipeBlock {
 
@@ -56,12 +56,12 @@ public class RoutedPipeBlock extends PipeBlock {
                                           BlockPos pos, Player player, InteractionHand hand,
                                           BlockHitResult hitResult) {
         // Sneak keeps the held item's normal use (bucket waterlogging, placing against the
-        // pipe, …). Without that escape hatch every click would be stolen by the UI.
+        // pipe, ...). Without that escape hatch every click would be stolen by the UI.
         if (player.isSecondaryUseActive()) {
             return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
         }
         // Request pipes open on any bare click; the wrench opens every routed pipe. Either
-        // way the click belongs to the pipe, not the held item — otherwise a water bucket
+        // way the click belongs to the pipe, not the held item - otherwise a water bucket
         // places fluid and only then opens the requester UI.
         if (isWrench(stack) || opensWithoutWrench()) {
             if (player instanceof ServerPlayer serverPlayer) {

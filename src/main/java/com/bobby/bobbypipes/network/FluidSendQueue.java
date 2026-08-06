@@ -133,6 +133,7 @@ public final class FluidSendQueue {
      * @return how much mB left providers this tick
      */
     public int tick(ServerLevel level,
+                    PipeNetwork network,
                     DeliveryLedger<BlockPos, FluidResource> ledger,
                     ParcelTracker<BlockPos, FluidShipment> parcels,
                     RoutingSnapshot<BlockPos> routes) {
@@ -161,7 +162,7 @@ public final class FluidSendQueue {
             if (reserved > 0) {
                 int free = FluidAccess.extractable(
                         level, job.source, job.fluid, saturatingAdd(want, reserved), job.excluded)
-                        - reserved;
+ - reserved;
                 want = Math.min(want, Math.max(0, free));
             }
             if (want <= 0) {
@@ -182,7 +183,8 @@ public final class FluidSendQueue {
             long promiseId = ledger.promise(job.source, job.dest, job.fluid, taken,
                     gameTime + FluidRequestService.PROMISE_TIMEOUT_TICKS);
             FluidShipment shipment = new FluidShipment(job.fluid, taken, promiseId, from);
-            boolean injected = parcels.inject(shipment, job.source, job.dest, routes).isPresent();
+            boolean injected = network.injectFluidToward(
+                    shipment, job.source, PipeNodeId.of(level, job.dest)).isPresent();
             if (!injected) {
                 ledger.cancel(promiseId);
                 // Refund respects the same exclusion, or a failed injection would hand the

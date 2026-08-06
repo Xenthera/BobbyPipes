@@ -84,13 +84,13 @@ public final class FluidRequestService {
 
         for (ParcelTracker.Delivery<BlockPos, FluidShipment> delivery : report.delivered()) {
             FluidShipment shipment = delivery.payload();
-            network.fluidLedger().recordDelivery(shipment.promiseId(), shipment.amountMb());
+            PipeNetwork.settleFluidDelivery(shipment.promiseId(), shipment.amountMb());
             FluidAccess.insert(level, delivery.destination(), shipment.resource(), shipment.amountMb());
         }
 
         for (ParcelTracker.Stranded<BlockPos, FluidShipment> stranded : report.stranded()) {
             FluidShipment shipment = stranded.payload();
-            network.fluidLedger().cancel(shipment.promiseId());
+            PipeNetwork.cancelFluidPromise(shipment.promiseId());
         }
     }
 
@@ -140,8 +140,8 @@ public final class FluidRequestService {
             // without it two tanks that each carry a Provider and a Supplier drain each
             // other forever and never settle. See SupplierReserves.
             int available = FluidAccess.extractable(level, provider, fluid, remaining, ownTanks)
-                    - network.fluidSendQueue().queued(provider, fluid)
-                    - SupplierReserves.reservedMb(level, provider, fluid);
+ - network.fluidSendQueue().queued(provider, fluid)
+ - SupplierReserves.reservedMb(level, provider, fluid);
             if (available <= 0) {
                 continue;
             }

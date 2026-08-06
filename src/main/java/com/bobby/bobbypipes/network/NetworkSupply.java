@@ -31,6 +31,10 @@ import java.util.Set;
  * request pull from the nearest chest. The planner drains that list in order and does not
  * re-sort it.
  *
+ * <p>Nodes are {@link PipeNodeId} so a provider or crafter across a link pipe is distinct
+ * from a same-coordinate pipe in another dimension, and recipes/stock resolve against the
+ * correct level.
+ *
  * <p>Free stock subtracts items still queued at the provider (accepted but not yet
  * extracted). In-flight promises are already gone from the chest, so they must not be
  * subtracted again.
@@ -42,11 +46,11 @@ import java.util.Set;
  * once via the nearest provider. Without that, the catalog and planner would sum the same
  * backing inventory for every pipe that touches it.
  */
-public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
+public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
 
     private final ServerLevel level;
     private final RoutingSnapshot<BlockPos> routes;
-    private final BlockPos requester;
+    private final PipeNodeId requester;
     private final ProviderSendQueue sendQueue;
     /** Storage identities the requester must not pull from (e.g. a Supplier's own chest). */
     private final Set<Object> excludedStores;
@@ -65,27 +69,31 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
                          Set<Object> excludedStores) {
         this.level = level;
         this.routes = routes;
-        this.requester = requester;
+        this.requester = PipeNodeId.of(level, requester);
         this.sendQueue = sendQueue;
         this.excludedStores = Set.copyOf(excludedStores);
     }
 
     @Override
-    public List<Stock<BlockPos, ItemResource>> available(ItemResource item) {
+    public List<Stock<PipeNodeId, ItemResource>> available(ItemResource item) {
         if (item.isEmpty()) {
             return List.of();
         }
-        List<Stock<BlockPos, ItemResource>> found = new ArrayList<>();
+        List<Stock<PipeNodeId, ItemResource>> found = new ArrayList<>();
         Set<Object> claimedStores = new HashSet<>(excludedStores);
-        for (BlockPos pipe : providerNodesByDistance()) {
+        for (PipeNodeId pipe : providerNodesByDistance()) {
             if (!isProvider(pipe)) {
                 continue;
             }
-            int held = ProviderAccess.countUnclaimed(level, pipe, item, claimedStores);
+            ServerLevel pipeLevel = levelOf(pipe);
+            if (pipeLevel == null) {
+                continue;
+            }
+            int held = ProviderAccess.countUnclaimed(pipeLevel, pipe.pos(), item, claimedStores);
             if (held <= 0) {
                 continue;
             }
-            int free = held - sendQueue.queued(pipe, item);
+            int free = held - queuedAt(pipeLevel, pipe, item);
             if (free > 0) {
                 found.add(new Stock<>(pipe, item, free));
             }
@@ -94,24 +102,28 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
     }
 
     @Override
-    public List<Craft<BlockPos, ItemResource>> recipesFor(ItemResource item) {
+    public List<Craft<PipeNodeId, ItemResource>> recipesFor(ItemResource item) {
         if (item.isEmpty()) {
             return List.of();
         }
-        List<Craft<BlockPos, ItemResource>> crafts = new ArrayList<>();
-        for (BlockPos pipe : providerNodesByDistance()) {
-            if (!(level.getBlockState(pipe).getBlock() instanceof CraftingPipeBlock)) {
+        List<Craft<PipeNodeId, ItemResource>> crafts = new ArrayList<>();
+        for (PipeNodeId pipe : providerNodesByDistance()) {
+            ServerLevel pipeLevel = levelOf(pipe);
+            if (pipeLevel == null
+                    || !(pipeLevel.getBlockState(pipe.pos()).getBlock() instanceof CraftingPipeBlock)) {
                 continue;
             }
-            if (!(level.getBlockEntity(pipe) instanceof CraftingPipeBlockEntity be)) {
+            if (!(pipeLevel.getBlockEntity(pipe.pos()) instanceof CraftingPipeBlockEntity be)) {
                 continue;
             }
             CraftPattern pattern = be.pattern();
             if (pattern.isEmpty()) {
                 continue;
             }
+            PipeNetwork pipeNetwork = PipeNetwork.get(pipeLevel);
             if (pattern.hasSatellite()
-                    && !SatelliteLookup.isReachable(level, routes, pipe, pattern.satellite())) {
+                    && !SatelliteLookup.isReachable(
+                            pipeLevel, pipeNetwork, pipe.pos(), pattern.satellite())) {
                 continue;
             }
             ItemStack output = pattern.primaryOutput();
@@ -125,7 +137,7 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
             // produced four planks, credited one, and stalled. The gathering side has
             // always merged, which is why the debug readout said eight while the plan
             // said one.
-            java.util.LinkedHashMap<ItemResource, Integer> totals = new java.util.LinkedHashMap<>();
+            LinkedHashMap<ItemResource, Integer> totals = new LinkedHashMap<>();
             for (CraftPattern.CountedIngredient ingredient : pattern.ingredients()) {
                 totals.merge(ingredient.item(), ingredient.count(), Integer::sum);
             }
@@ -152,28 +164,35 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
         Map<ItemResource, Integer> totals = new LinkedHashMap<>();
         Map<ItemResource, Boolean> craftable = new LinkedHashMap<>();
         Set<Object> claimedStores = new HashSet<>(excludedStores);
-        for (BlockPos pipe : providerNodesByDistance()) {
+        for (PipeNodeId pipe : providerNodesByDistance()) {
+            ServerLevel pipeLevel = levelOf(pipe);
+            if (pipeLevel == null) {
+                continue;
+            }
             if (isProvider(pipe)) {
                 for (Map.Entry<ItemResource, Integer> held
-                        : ProviderAccess.summarizeUnclaimed(level, pipe, claimedStores).entrySet()) {
-                    int free = held.getValue() - sendQueue.queued(pipe, held.getKey());
+                        : ProviderAccess.summarizeUnclaimed(
+                                pipeLevel, pipe.pos(), claimedStores).entrySet()) {
+                    int free = held.getValue() - queuedAt(pipeLevel, pipe, held.getKey());
                     if (free > 0) {
                         totals.merge(held.getKey(), free, Integer::sum);
                     }
                 }
             }
-            if (!(level.getBlockState(pipe).getBlock() instanceof CraftingPipeBlock)) {
+            if (!(pipeLevel.getBlockState(pipe.pos()).getBlock() instanceof CraftingPipeBlock)) {
                 continue;
             }
-            if (!(level.getBlockEntity(pipe) instanceof CraftingPipeBlockEntity be)) {
+            if (!(pipeLevel.getBlockEntity(pipe.pos()) instanceof CraftingPipeBlockEntity be)) {
                 continue;
             }
             CraftPattern pattern = be.pattern();
             if (pattern.isEmpty()) {
                 continue;
             }
+            PipeNetwork pipeNetwork = PipeNetwork.get(pipeLevel);
             if (pattern.hasSatellite()
-                    && !SatelliteLookup.isReachable(level, routes, pipe, pattern.satellite())) {
+                    && !SatelliteLookup.isReachable(
+                            pipeLevel, pipeNetwork, pipe.pos(), pattern.satellite())) {
                 continue;
             }
             ItemStack output = pattern.primaryOutput();
@@ -215,24 +234,63 @@ public final class NetworkSupply implements Supply<BlockPos, ItemResource> {
     }
 
     /**
-     * Every node that could hold stock, nearest first.
+     * Every node that could hold stock or craft, nearest first.
      *
      * <p>The requester itself is included: an inventory attached to the requesting pipe is
-     * a legitimate and maximally cheap source.
+     * a legitimate and maximally cheap source. Remote nodes reached through a live link
+     * follow, keyed by full {@link PipeNodeId} so same-coordinate pipes in another
+     * dimension are not dropped.
      */
-    private List<BlockPos> providerNodesByDistance() {
-        return routes.routesFrom(requester)
+    private List<PipeNodeId> providerNodesByDistance() {
+        List<PipeNodeId> ordered = routes.routesFrom(requester.pos())
                 .map(table -> {
-                    List<BlockPos> ordered = new ArrayList<>();
-                    ordered.add(requester);
-                    ordered.addAll(table.destinationsByCost());
-                    return ordered;
+                    List<PipeNodeId> list = new ArrayList<>();
+                    list.add(requester);
+                    for (BlockPos dest : table.destinationsByCost()) {
+                        list.add(PipeNodeId.of(level, dest));
+                    }
+                    return list;
                 })
-                .orElseGet(() -> routes.contains(requester) ? List.of(requester) : List.of());
+                .orElseGet(() -> routes.contains(requester.pos())
+                        ? new ArrayList<>(List.of(requester))
+                        : new ArrayList<>());
+        Set<PipeNodeId> seen = new HashSet<>(ordered);
+        for (RoutingSnapshot<PipeNodeId> bridge : CrossDimPipeGraph.bridges()) {
+            if (!bridge.contains(requester)) {
+                continue;
+            }
+            for (PipeNodeId node : bridge.topology().nodes()) {
+                if (node.sameDimension(requester)) {
+                    continue;
+                }
+                if (seen.contains(node) || !bridge.canReach(requester, node)) {
+                    continue;
+                }
+                ordered.add(node);
+                seen.add(node);
+            }
+        }
+        return ordered;
     }
 
-    private boolean isProvider(BlockPos pipe) {
-        return level.hasChunkAt(pipe)
-                && level.getBlockState(pipe).getBlock() instanceof ProviderPipeBlock;
+    private int queuedAt(ServerLevel pipeLevel, PipeNodeId pipe, ItemResource item) {
+        if (pipeLevel == level) {
+            return sendQueue.queued(pipe.pos(), item);
+        }
+        return PipeNetwork.get(pipeLevel).sendQueue().queued(pipe.pos(), item);
+    }
+
+    private boolean isProvider(PipeNodeId pipe) {
+        ServerLevel pipeLevel = levelOf(pipe);
+        return pipeLevel != null
+                && pipeLevel.hasChunkAt(pipe.pos())
+                && pipeLevel.getBlockState(pipe.pos()).getBlock() instanceof ProviderPipeBlock;
+    }
+
+    private ServerLevel levelOf(PipeNodeId pipe) {
+        if (pipe.sameDimension(requester)) {
+            return level;
+        }
+        return LinkPipeRegistry.levelOf(level.getServer(), pipe);
     }
 }

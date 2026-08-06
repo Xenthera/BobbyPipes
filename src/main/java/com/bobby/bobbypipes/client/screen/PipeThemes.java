@@ -28,12 +28,16 @@ final class PipeThemes {
     static final UiTheme PASSIVE_SUPPLIER = BobbyThemes.tinted(0x297A94);
     /** Satellite - rose/magenta. */
     static final UiTheme SATELLITE = BobbyThemes.tinted(0x94295F);
+    /** Link pipe - deep violet (wormhole). */
+    static final UiTheme LINK = BobbyThemes.tinted(0x5A2D9E);
     /** Request role / autocraft stock UI - teal green. */
     static final UiTheme REQUEST = BobbyThemes.tinted(0x29946D);
     /** Pattern table - crafting-table wood. */
     static final UiTheme PATTERN_TABLE = BobbyThemes.tinted(0x693F27);
     /** Autocraft monitor - mint-teal (job board). */
     static final UiTheme AUTOCRAFT_MONITOR = BobbyThemes.tinted(0x2F9A92);
+    /** Chunk loader - cyan (force-load debug). */
+    static final UiTheme CHUNK_LOADER = BobbyThemes.tinted(0x2A8CA8);
 
     private PipeThemes() {
     }

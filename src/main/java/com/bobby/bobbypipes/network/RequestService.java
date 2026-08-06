@@ -28,7 +28,7 @@ public final class RequestService {
     }
 
     /**
-     * What committing accepted  -  not a delivery receipt.
+     * What committing accepted - not a delivery receipt.
      *
      * <p>{@code shipped} counts items accepted onto the provider send queue plus craft jobs
      * accepted to produce the demand item. Craft amounts are <strong>not</strong> yet
@@ -56,7 +56,7 @@ public final class RequestService {
      * @param commitment present only when {@code commit} was requested and a pipe existed
      */
     public record Outcome(
-            RequestPlan<BlockPos, ItemResource> plan,
+            RequestPlan<PipeNodeId, ItemResource> plan,
             Commitment commitment) {
 
         public static Outcome noPipe() {
@@ -99,7 +99,7 @@ public final class RequestService {
         if (!ensureRouted(network, at)) {
             return Outcome.noPipe();
         }
-        RequestPlan<BlockPos, ItemResource> plan =
+        RequestPlan<PipeNodeId, ItemResource> plan =
                 RequestPlanner.plan(new Demand<>(item, count), network.supplyFor(at, excludedStores));
         Commitment commitment = commit
                 ? RequestService.commit(level, network, plan, at, item, count, excludedStores)
@@ -159,7 +159,7 @@ public final class RequestService {
             return Outcome.noPipe();
         }
         NetworkSupply supply = network.supplyFor(at, excludedStores);
-        RequestPlan<BlockPos, ItemResource> plan =
+        RequestPlan<PipeNodeId, ItemResource> plan =
                 RequestPlanner.plan(new Demand<>(item, count), supply);
         if (plan.isEmpty()) {
             return new Outcome(plan, new Commitment(0, count));
@@ -173,7 +173,7 @@ public final class RequestService {
         if (want <= 0) {
             return new Outcome(plan, new Commitment(0, count));
         }
-        RequestPlan<BlockPos, ItemResource> partial =
+        RequestPlan<PipeNodeId, ItemResource> partial =
                 RequestPlanner.plan(new Demand<>(item, want), supply);
         if (!partial.isComplete()) {
             return new Outcome(plan, new Commitment(0, count));
@@ -196,9 +196,9 @@ public final class RequestService {
     }
 
     /** How many of {@code item} this (possibly incomplete) plan would deliver to the requester. */
-    static int satisfiableAmount(RequestPlan<BlockPos, ItemResource> plan, ItemResource item) {
+    static int satisfiableAmount(RequestPlan<PipeNodeId, ItemResource> plan, ItemResource item) {
         int total = plan.withdrawnTotal(item);
-        for (RequestPlan.CraftStep<BlockPos, ItemResource> step : plan.crafts()) {
+        for (RequestPlan.CraftStep<PipeNodeId, ItemResource> step : plan.crafts()) {
             if (item.equals(step.output())) {
                 total += step.totalOutput();
             }
@@ -216,7 +216,7 @@ public final class RequestService {
      */
     public static Commitment commit(ServerLevel level,
                                     PipeNetwork network,
-                                    RequestPlan<BlockPos, ItemResource> plan,
+                                    RequestPlan<PipeNodeId, ItemResource> plan,
                                     BlockPos requester,
                                     ItemResource requestedItem,
                                     int requestedAmount) {
@@ -234,7 +234,7 @@ public final class RequestService {
      */
     public static Commitment commit(ServerLevel level,
                                     PipeNetwork network,
-                                    RequestPlan<BlockPos, ItemResource> plan,
+                                    RequestPlan<PipeNodeId, ItemResource> plan,
                                     BlockPos requester,
                                     ItemResource requestedItem,
                                     int requestedAmount,
@@ -248,22 +248,26 @@ public final class RequestService {
             return new Commitment(0, requestedAmount);
         }
 
-        RoutingSnapshot<BlockPos> routes = network.routes();
-        ProviderSendQueue sendQueue = network.sendQueue();
-
         int accepted = 0;
         int stillNeedFromCraft = Math.max(0, requestedAmount);
+        PipeNodeId destNode = PipeNodeId.of(level, requester);
 
         // Withdrawals are now only what heads straight for the requester; stock feeding a
         // craft is bound inside its craft step, so the old item-name filter is gone. That
         // filter also skipped legitimate direct pulls whenever the same item appeared
         // anywhere in a recipe.
-        for (RequestPlan.Withdrawal<BlockPos, ItemResource> withdrawal : plan.withdrawals()) {
-            BlockPos source = withdrawal.source();
-            if (!source.equals(requester) && routes.nextHop(source, requester).isEmpty()) {
+        for (RequestPlan.Withdrawal<PipeNodeId, ItemResource> withdrawal : plan.withdrawals()) {
+            PipeNodeId sourceNode = withdrawal.source();
+            if (!sourceNode.equals(destNode) && !network.canDeliver(sourceNode, destNode)) {
                 continue;
             }
-            sendQueue.enqueue(source, requester, withdrawal.item(), withdrawal.amount(),
+            ServerLevel sourceLevel = LinkPipeRegistry.levelOf(level.getServer(), sourceNode);
+            if (sourceLevel == null) {
+                continue;
+            }
+            PipeNetwork sourceNetwork = PipeNetwork.get(sourceLevel);
+            sourceNetwork.sendQueue().enqueueToward(
+                    sourceNode.pos(), destNode, withdrawal.item(), withdrawal.amount(),
                     excludedStores);
             if (withdrawal.item().equals(requestedItem)) {
                 accepted += withdrawal.amount();
@@ -272,11 +276,12 @@ public final class RequestService {
         }
 
         accepted += network.craftJobs().enqueue(
-                plan, requester, requestedItem, stillNeedFromCraft, level.getGameTime());
+                plan, destNode, requestedItem, stillNeedFromCraft, level.getGameTime());
 
-        // Kick providers and craft gathering on the committing tick.
+        // Kick providers and craft gathering on the committing tick. Remote providers live
+        // on their own networks; those advance on their levels' ticks.
         network.craftJobs().tick(level, network);
-        sendQueue.tick(level, network.ledger(), network.parcels(), routes);
+        network.sendQueue().tick(level, network, network.ledger(), network.parcels(), network.routes());
 
         return new Commitment(accepted, requestedAmount);
     }
@@ -326,14 +331,14 @@ public final class RequestService {
 
         for (ParcelTracker.Delivery<BlockPos, ItemShipment> delivery : report.delivered()) {
             ItemShipment shipment = delivery.payload();
-            network.ledger().recordDelivery(shipment.promiseId(), shipment.count());
+            PipeNetwork.settleItemDelivery(shipment.promiseId(), shipment.count());
             InventoryAccess.insertOrDrop(
                     level, delivery.destination(), shipment.resource(), shipment.count());
         }
 
         for (ParcelTracker.Stranded<BlockPos, ItemShipment> stranded : report.stranded()) {
             ItemShipment shipment = stranded.payload();
-            network.ledger().cancel(shipment.promiseId());
+            PipeNetwork.cancelItemPromise(shipment.promiseId());
             InventoryAccess.insertOrDrop(
                     level, stranded.at(), shipment.resource(), shipment.count());
         }

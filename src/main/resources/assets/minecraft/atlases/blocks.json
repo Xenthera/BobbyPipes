@@ -414,6 +414,42 @@
           "overlays": [
             "bobbypipes:pipe_base/pipe_indicator_indirect"
           ]
+        },
+        {
+          "output": "bobbypipes:block/link_pipe",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 5911966,
+          "overlays": []
+        },
+        {
+          "output": "bobbypipes:block/link_pipe_waiting",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 5911966,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_link_waiting"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/link_pipe_severed",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 5911966,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_link_severed"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/link_pipe_live",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 5911966,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_link_live"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/link_pipe_arm",
+          "base": "bobbypipes:pipe_base/pipe_arm_base",
+          "tint": 5911966,
+          "overlays": []
         }
       ]
     }

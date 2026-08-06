@@ -74,18 +74,6 @@ public final class ParcelDebugRenderer {
     private static final float BLOCK_GROUND_OFFSET = 3.0f / 16.0f;
 
     /**
-     * Cargo scale per parcel tier, indexed by
-     * {@link com.bobby.bobbypipes.transit.ParcelTier#wireId()} with 0 (items, drift) at 1.
-     *
-     * <p>Energy and fluid parcels all draw one fixed model with no stack count to read, so
-     * {@link #copiesFor} cannot show their size the way it does for items - a parcel of a
-     * million FE and one of a thousand were pixel identical. Scale is the one channel left.
-     * Kept modest deliberately: a T3 has to still fit visually inside the pipe cage, and the
-     * cage grows alongside it below so the frame does not clip through the cargo.
-     */
-    private static final float[] TIER_SCALE = {1.0f, 1.0f, 1.25f, 1.5f};
-
-    /**
      * How far an arm tip sits from the pipe centre (must match {@link #armPoint}).
      *
      * <p>One block reaches the centre of the neighbouring inventory, so the item finishes
@@ -139,6 +127,10 @@ public final class ParcelDebugRenderer {
             }
 
             Vec3 pos = hopPosition(entry);
+            // Wormhole hop: vanish at the entrance; the parcel reappears after handoff.
+            if (pos == null) {
+                continue;
+            }
 
             ItemStackRenderState itemState = new ItemStackRenderState();
             resolver.updateForTopItem(
@@ -166,10 +158,8 @@ public final class ParcelDebugRenderer {
                 boolean isBlock = stack.getItem() instanceof net.minecraft.world.item.BlockItem;
                 // One cage per routed parcel (not per stack-copy clutter).
                 ItemStackRenderState cage = c == 0 && entry.routed() ? cageState : null;
-                float tierScale = tierScale(entry.tier());
                 drawn.add(new DrawnParcel(
-                        offset, itemState, light, scaleFor(stack) * tierScale, isBlock, cage,
-                        CAGE_SCALE * tierScale));
+                        offset, itemState, light, scaleFor(stack), isBlock, cage));
             }
         }
 
@@ -199,7 +189,7 @@ public final class ParcelDebugRenderer {
 
             if (parcel.cage() != null) {
                 poseStack.pushPose();
-                poseStack.scale(parcel.cageScale(), parcel.cageScale(), parcel.cageScale());
+                poseStack.scale(CAGE_SCALE, CAGE_SCALE, CAGE_SCALE);
                 // Cage is a block-shaped item under GROUND, same cancel as block cargo.
                 poseStack.translate(0.0f, -BLOCK_GROUND_OFFSET, 0.0f);
                 parcel.cage().submit(
@@ -224,14 +214,12 @@ public final class ParcelDebugRenderer {
     /**
      * Where a parcel sits for the current hop progress.
      *
-     * <p>Progress (0 to 1) always spans the hop's authoritative, server-reported duration
-     * (the synced {@code ticksForHop}), and is split across the polyline (enter arm to
-     * centres to exit arm) below in proportion to each leg's length, so every leg moves at
-     * one uniform speed. A hop with an arm is quicker overall than a plain one, since it
-     * covers more ground in the same fixed time, but never speeds up partway through
-     * itself.
+     * <p>Progress (0 to 1) spans the server's {@code ticksForHop}. Distance is enter arm
+     * (if {@code enterFrom}) + 1 block centre-to-centre + exit arm (if {@code exitTo}),
+     * so legs share one speed. Those arm flags must match what the server used when it
+     * set {@code ticksForHop} (entrySide / accepting inventory beside the destination).
      */
-    private static Vec3 hopPosition(ClientParcels.Drawn entry) {
+    private static @Nullable Vec3 hopPosition(ClientParcels.Drawn entry) {
         float progress = Mth.clamp(entry.progress(), 0.0f, 1.0f);
         Vec3 atCenter = Vec3.atCenterOf(entry.at());
         if (entry.next().isEmpty()) {
@@ -241,6 +229,11 @@ public final class ParcelDebugRenderer {
         }
 
         BlockPos next = entry.next().get();
+        // Link-pipe wormhole: never world-lerp across the gap - hide until the parcel is
+        // on the peer (flag from sync, or non-adjacent centres as a safety net).
+        if (entry.linkHop() || ParcelSyncPayload.isLinkHop(entry.at(), next)) {
+            return null;
+        }
         Vec3 nextCenter = Vec3.atCenterOf(next);
         // Drift "leaving" legs send next == at and only animate down the arm.
         if (entry.at().equals(next)) {
@@ -301,13 +294,7 @@ public final class ParcelDebugRenderer {
                 : SCALE;
     }
 
-    /** Cargo scale for a parcel tier, 1 for anything untiered or out of range. */
-    private static float tierScale(int tier) {
-        return tier >= 0 && tier < TIER_SCALE.length ? TIER_SCALE[tier] : 1.0f;
-    }
-
     private record DrawnParcel(Vec3 pos, ItemStackRenderState item, int light, float scale,
-                               boolean block, @Nullable ItemStackRenderState cage,
-                               float cageScale) {
+                               boolean block, @Nullable ItemStackRenderState cage) {
     }
 }

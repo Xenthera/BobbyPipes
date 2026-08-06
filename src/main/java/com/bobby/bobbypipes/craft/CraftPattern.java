@@ -27,7 +27,7 @@ public record CraftPattern(
         List<ItemStack> outputs,
         String satellite) {
 
-    /** Rightmost column of a 3x3 grid  -  LP satellite slots. */
+    /** Rightmost column of a 3x3 grid - LP satellite slots. */
     public static final int SATELLITE_SLOT_START = 6;
     public static final int SATELLITE_SLOT_END = 9;
 

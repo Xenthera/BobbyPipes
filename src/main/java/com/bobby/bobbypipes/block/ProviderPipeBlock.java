@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * personal storage being drained by a network that merely passes nearby.
  *
  * <p>Send rate matches {@link PipeExtractRates}: {@link #ITEMS_PER_PULSE} items every
- * {@link #PULSE_INTERVAL_TICKS} ticks. Each pulse is one parcel  -  large requests drip out
+ * {@link #PULSE_INTERVAL_TICKS} ticks. Each pulse is one parcel - large requests drip out
  * over time rather than leaving as a single giant stack.
  */
 public class ProviderPipeBlock extends RoutedPipeBlock implements EntityBlock {

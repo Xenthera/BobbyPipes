@@ -13,7 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A routed pipe with no inventory role  -  the Logistics Pipes "Basic" pipe.
+ * A routed pipe with no inventory role - the Logistics Pipes "Basic" pipe.
  *
  * <p>Place these at junctions of transport pipe so the router graph stays connected.
  * Optionally mark one as a default route (GUI checkbox) so excess items prefer its

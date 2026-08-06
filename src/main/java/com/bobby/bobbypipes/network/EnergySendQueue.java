@@ -127,6 +127,7 @@ public final class EnergySendQueue {
      * @return how much FE left providers this tick
      */
     public int tick(ServerLevel level,
+                    PipeNetwork network,
                     DeliveryLedger<BlockPos, EnergyKind> ledger,
                     ParcelTracker<BlockPos, EnergyShipment> parcels,
                     RoutingSnapshot<BlockPos> routes) {
@@ -181,7 +182,8 @@ public final class EnergySendQueue {
             long promiseId = ledger.promise(job.source, job.dest, EnergyKind.ENERGY, taken,
                     gameTime + EnergyRequestService.PROMISE_TIMEOUT_TICKS);
             EnergyShipment shipment = new EnergyShipment(taken, promiseId, from);
-            boolean injected = parcels.inject(shipment, job.source, job.dest, routes).isPresent();
+            boolean injected = network.injectEnergyToward(
+                    shipment, job.source, PipeNodeId.of(level, job.dest)).isPresent();
             if (!injected) {
                 ledger.cancel(promiseId);
                 // Put it back where it came from, which must respect the same exclusion,

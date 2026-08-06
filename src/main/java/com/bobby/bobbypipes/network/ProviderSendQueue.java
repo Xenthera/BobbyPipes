@@ -35,7 +35,7 @@ public final class ProviderSendQueue {
     /**
      * Queues {@code amount} to pull from {@code source} toward {@code dest}.
      *
-     * <p>Nothing is extracted yet  -  that happens on {@link #tick} as the provider's send
+     * <p>Nothing is extracted yet - that happens on {@link #tick} as the provider's send
      * budget allows.
      */
     public void enqueue(BlockPos source, BlockPos dest, ItemResource item, int amount) {
@@ -55,7 +55,19 @@ public final class ProviderSendQueue {
         if (item.isEmpty() || amount <= 0) {
             return;
         }
-        jobs.add(new Job(source.immutable(), dest.immutable(), item, amount, Set.copyOf(excluded)));
+        jobs.add(new Job(source.immutable(), dest.immutable(), null, item, amount, Set.copyOf(excluded)));
+    }
+
+    /**
+     * Queues a pull whose destination may sit in another dimension (cross-dim link).
+     */
+    public void enqueueToward(BlockPos source, PipeNodeId dest, ItemResource item, int amount,
+                              Set<Object> excluded) {
+        if (item.isEmpty() || amount <= 0) {
+            return;
+        }
+        jobs.add(new Job(source.immutable(), dest.pos().immutable(), dest, item, amount,
+                Set.copyOf(excluded)));
     }
 
     /** How many of {@code item} are still waiting to leave {@code source}. */
@@ -85,6 +97,30 @@ public final class ProviderSendQueue {
         int total = 0;
         for (Job job : jobs) {
             if (job.dest.equals(dest) && job.item.equals(item)) {
+                total += job.remaining;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * How many of {@code item} are scheduled to arrive at {@code dest}, matching full
+     * {@link PipeNodeId} when the job was enqueued cross-dimensionally.
+     */
+    public int queuedToward(PipeNodeId dest, ItemResource item) {
+        if (item.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (Job job : jobs) {
+            if (!job.item.equals(item)) {
+                continue;
+            }
+            if (job.destNode != null) {
+                if (job.destNode.equals(dest)) {
+                    total += job.remaining;
+                }
+            } else if (job.dest.equals(dest.pos())) {
                 total += job.remaining;
             }
         }
@@ -135,11 +171,55 @@ public final class ProviderSendQueue {
     }
 
     /**
+     * Cancels queued pulls toward {@code dest}, matching full {@link PipeNodeId} when the
+     * job was enqueued cross-dimensionally (and pos-only for legacy same-dim jobs).
+     */
+    public int cancelToward(PipeNodeId dest) {
+        int cancelled = 0;
+        Iterator<Job> iterator = jobs.iterator();
+        while (iterator.hasNext()) {
+            Job job = iterator.next();
+            if (matchesDest(job, dest)) {
+                cancelled += job.remaining;
+                iterator.remove();
+            }
+        }
+        return cancelled;
+    }
+
+    /**
+     * Cancels queued pulls of {@code item} toward {@code dest}.
+     */
+    public int cancelToward(PipeNodeId dest, ItemResource item) {
+        if (item.isEmpty()) {
+            return 0;
+        }
+        int cancelled = 0;
+        Iterator<Job> iterator = jobs.iterator();
+        while (iterator.hasNext()) {
+            Job job = iterator.next();
+            if (job.item.equals(item) && matchesDest(job, dest)) {
+                cancelled += job.remaining;
+                iterator.remove();
+            }
+        }
+        return cancelled;
+    }
+
+    private static boolean matchesDest(Job job, PipeNodeId dest) {
+        if (job.destNode != null) {
+            return job.destNode.equals(dest);
+        }
+        return job.dest.equals(dest.pos());
+    }
+
+    /**
      * Extracts and injects as many pulse-sized parcels as current provider budgets allow.
      *
      * @return how many items left providers this tick
      */
     public int tick(ServerLevel level,
+                    PipeNetwork network,
                     DeliveryLedger<BlockPos, ItemResource> ledger,
                     ParcelTracker<BlockPos, ItemShipment> parcels,
                     RoutingSnapshot<BlockPos> routes) {
@@ -172,7 +252,7 @@ public final class ProviderSendQueue {
                     ProviderAccess.sideHolding(level, job.source, job.item, job.excluded).orElse(null);
             int taken = ProviderAccess.extract(level, job.source, job.item, want, job.excluded);
             if (taken <= 0) {
-                // Chest emptied or pipe broken  -  drop the rest of this job.
+                // Chest emptied or pipe broken - drop the rest of this job.
                 iterator.remove();
                 continue;
             }
@@ -181,7 +261,10 @@ public final class ProviderSendQueue {
                     job.source, job.dest, job.item, taken,
                     gameTime + RequestService.PROMISE_TIMEOUT_TICKS);
             ItemShipment shipment = new ItemShipment(job.item, taken, promiseId, from);
-            boolean injected = parcels.inject(shipment, job.source, job.dest, routes).isPresent();
+            PipeNodeId destNode = job.destNode != null
+                    ? job.destNode
+                    : PipeNodeId.of(level, job.dest);
+            boolean injected = network.injectItemToward(shipment, job.source, destNode).isPresent();
             if (!injected) {
                 ledger.cancel(promiseId);
                 InventoryAccess.insertOrDrop(level, job.source, job.item, taken);
@@ -202,15 +285,17 @@ public final class ProviderSendQueue {
     private static final class Job {
         private final BlockPos source;
         private final BlockPos dest;
+        private final PipeNodeId destNode;
         private final ItemResource item;
         /** Store identities this job must not pull from, normally the requester's own. */
         private final Set<Object> excluded;
         private int remaining;
 
-        private Job(BlockPos source, BlockPos dest, ItemResource item, int remaining,
-                    Set<Object> excluded) {
+        private Job(BlockPos source, BlockPos dest, PipeNodeId destNode, ItemResource item,
+                    int remaining, Set<Object> excluded) {
             this.source = source;
             this.dest = dest;
+            this.destNode = destNode;
             this.item = item;
             this.remaining = remaining;
             this.excluded = excluded;

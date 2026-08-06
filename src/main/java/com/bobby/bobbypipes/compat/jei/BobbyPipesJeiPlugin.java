@@ -39,7 +39,7 @@ import java.util.Optional;
 
 /**
  * JEI: {@code +} on a crafting recipe pastes ghosts into the open pattern table / crafting
- * pipe. Does not pull items from the inventory  -  pattern encoding only.
+ * pipe. Does not pull items from the inventory - pattern encoding only.
  *
  * <p>Keep the pattern table (or crafting pipe) open underneath the JEI recipe screen so JEI
  * can see the parent menu; otherwise the transfer button stays hidden.
@@ -55,7 +55,7 @@ public class BobbyPipesJeiPlugin implements IModPlugin {
     @Override
     public void registerRecipeTransferHandlers(IRecipeTransferRegistration registration) {
         IRecipeTransferHandlerHelper helper = registration.getTransferHelper();
-        // Typed crafting handler  -  what JEI looks up first for the crafting category.
+        // Typed crafting handler - what JEI looks up first for the crafting category.
         registration.addRecipeTransferHandler(
                 new PatternTableCraftingTransfer(helper), RecipeTypes.CRAFTING);
         registration.addRecipeTransferHandler(
@@ -181,7 +181,7 @@ public class BobbyPipesJeiPlugin implements IModPlugin {
                 ClientPacketDistributor.sendToServer(new SetCraftPatternPayload(
                         container.pos(), SetCraftPatternPayload.Target.TABLE, pattern));
             }
-            // null = success, no inventory check  -  ghost encode only
+            // null = success, no inventory check - ghost encode only
             return null;
         }
     }

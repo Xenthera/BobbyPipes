@@ -11,7 +11,7 @@ import java.util.Set;
  * Finds unbranched corridors between routed (smart) pipes on a pipe lattice.
  *
  * <p>Minecraft-free so the walk can be unit-tested. A corridor is a path whose endpoints
- * are smart and whose every intermediate node has pipe-degree exactly two  -  the classic
+ * are smart and whose every intermediate node has pipe-degree exactly two - the classic
  * Logistics Pipes "direct connection". Those corridors become the edges of the routing
  * graph; plain pipes on a corridor are transit fabric, not routers.
  */
@@ -86,7 +86,7 @@ public final class DirectCorridors {
      * Directed exits from smart pipes that begin a successful corridor.
      *
      * <p>These are the green "routed exits" on logistics pipes. Intermediate plain-pipe
-     * edges are intentionally omitted  -  dumb pipes do not show routing marks.
+     * edges are intentionally omitted - dumb pipes do not show routing marks.
      */
     public static <N> Set<Edge<N>> routedExits(Topology<N> lattice, Set<N> smartNodes) {
         Set<Edge<N>> result = new HashSet<>();
@@ -119,7 +119,7 @@ public final class DirectCorridors {
      * corridor (including intermediate plain pipes) plus isolated smart nodes.
      *
      * <p>A plain-pipe junction is absent here even when the lattice still connects both
-     * ends  -  that is intentional. Those arms are separate networks until a smart pipe
+     * ends - that is intentional. Those arms are separate networks until a smart pipe
      * sits on the junction.
      */
     public static <N> Topology<N> transitTopology(Topology<N> lattice, Set<N> smartNodes) {
