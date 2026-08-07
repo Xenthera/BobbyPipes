@@ -3,18 +3,12 @@ package com.bobby.bobbypipes.block.entity;
 import com.bobby.bobbypipes.menu.SupplierPipeMenu;
 import com.bobby.bobbypipes.pipes.SupplierRequests;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
@@ -32,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * configuration, its storage, its sync and its screen are the same for both, so they live
  * here and each subclass only supplies its half of the behaviour.
  */
-public abstract class StockTargetPipeBlockEntity extends BlockEntity implements MenuProvider {
+public abstract class StockTargetPipeBlockEntity extends PipeBlockEntity implements MenuProvider {
 
     private final String titleKey;
     private SupplierRequests requests = SupplierRequests.EMPTY;
@@ -95,15 +89,5 @@ public abstract class StockTargetPipeBlockEntity extends BlockEntity implements 
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
         requests = input.read("requests", SupplierRequests.CODEC).orElse(SupplierRequests.EMPTY);
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        return saveWithoutMetadata(registries);
-    }
-
-    @Override
-    public @Nullable Packet<ClientGamePacketListener> getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
     }
 }

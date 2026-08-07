@@ -1,0 +1,130 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm"
+      },
+      "when": {
+        "covered": "false",
+        "north": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap"
+      },
+      "when": {
+        "covered": "false",
+        "north": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_arm",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/pipe_cap",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none"
+      }
+    },
+    {
+      "apply": {
+        "type": "bobbypipes:chameleon_cover"
+      },
+      "when": {
+        "covered": "true"
+      }
+    }
+  ]
+}

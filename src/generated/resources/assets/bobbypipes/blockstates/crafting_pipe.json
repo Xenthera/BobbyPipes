@@ -1,0 +1,319 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "powered": "true"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "powered": "false"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "powered": "true",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "powered": "false",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm"
+      },
+      "when": {
+        "covered": "false",
+        "north": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct"
+      },
+      "when": {
+        "covered": "false",
+        "north": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect"
+      },
+      "when": {
+        "covered": "false",
+        "north": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered"
+      },
+      "when": {
+        "covered": "false",
+        "north": "none",
+        "powered": "true"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered"
+      },
+      "when": {
+        "covered": "false",
+        "north": "none",
+        "powered": "false"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "powered": "true",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "powered": "false",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "powered": "true",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "powered": "false",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_direct",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "direct"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_arm_indirect",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "indirect"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_powered",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "powered": "true"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/crafting_pipe_cap_unpowered",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "powered": "false"
+      }
+    },
+    {
+      "apply": {
+        "type": "bobbypipes:chameleon_cover"
+      },
+      "when": {
+        "covered": "true"
+      }
+    }
+  ]
+}

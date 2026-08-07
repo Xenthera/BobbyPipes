@@ -2,8 +2,8 @@ package com.bobby.bobbypipes.compat.computercraft;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.entity.SatellitePipeBlockEntity;
-import com.bobby.bobbypipes.network.PipeNetwork;
-import com.bobby.bobbypipes.network.SatelliteLookup;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.SatelliteLookup;
 import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;

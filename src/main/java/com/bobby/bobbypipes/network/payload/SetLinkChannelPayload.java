@@ -2,7 +2,7 @@ package com.bobby.bobbypipes.network.payload;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.entity.LinkPipeBlockEntity;
-import com.bobby.bobbypipes.network.LinkClaimResult;
+import com.bobby.bobbypipes.logistics.LinkClaimResult;
 import com.bobby.bobbypipes.pipes.LinkChannelResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;

@@ -1,8 +1,8 @@
 package com.bobby.bobbypipes.block.entity;
 
-import com.bobby.bobbypipes.network.InventoryAccess;
-import com.bobby.bobbypipes.network.PipeNetwork;
-import com.bobby.bobbypipes.network.RequestService;
+import com.bobby.bobbypipes.logistics.InventoryAccess;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.RequestService;
 import com.bobby.bobbypipes.pipes.SupplierRequests;
 import com.bobby.bobbypipes.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;

@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.transit;
 
-import com.bobby.bobbypipes.network.RoutingSnapshot;
-import com.bobby.bobbypipes.network.Topology;
+import com.bobby.bobbypipes.logistics.RoutingSnapshot;
+import com.bobby.bobbypipes.logistics.Topology;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

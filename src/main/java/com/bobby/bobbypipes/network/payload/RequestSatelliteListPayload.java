@@ -1,8 +1,8 @@
 package com.bobby.bobbypipes.network.payload;
 
 import com.bobby.bobbypipes.BobbyPipes;
-import com.bobby.bobbypipes.network.PipeNetwork;
-import com.bobby.bobbypipes.network.SatelliteLookup;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.SatelliteLookup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;

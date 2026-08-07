@@ -1,0 +1,331 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "link": "idle"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "link": "waiting"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "link": "severed"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live",
+        "x": 90
+      },
+      "when": {
+        "covered": "false",
+        "down": "none",
+        "link": "live"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "up": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "idle",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "waiting",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "severed",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live",
+        "x": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "live",
+        "up": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm"
+      },
+      "when": {
+        "covered": "false",
+        "north": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap"
+      },
+      "when": {
+        "covered": "false",
+        "link": "idle",
+        "north": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting"
+      },
+      "when": {
+        "covered": "false",
+        "link": "waiting",
+        "north": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed"
+      },
+      "when": {
+        "covered": "false",
+        "link": "severed",
+        "north": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live"
+      },
+      "when": {
+        "covered": "false",
+        "link": "live",
+        "north": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "south": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "link": "idle",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "link": "waiting",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "link": "severed",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live",
+        "y": 180
+      },
+      "when": {
+        "covered": "false",
+        "link": "live",
+        "south": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "west": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "idle",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "waiting",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "severed",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live",
+        "y": 270
+      },
+      "when": {
+        "covered": "false",
+        "link": "live",
+        "west": "none"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_arm",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "direct|indirect|inventory"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "link": "idle"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_waiting",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "link": "waiting"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_severed",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "link": "severed"
+      }
+    },
+    {
+      "apply": {
+        "model": "bobbypipes:block/link_pipe_cap_live",
+        "y": 90
+      },
+      "when": {
+        "covered": "false",
+        "east": "none",
+        "link": "live"
+      }
+    },
+    {
+      "apply": {
+        "type": "bobbypipes:chameleon_cover"
+      },
+      "when": {
+        "covered": "true"
+      }
+    }
+  ]
+}

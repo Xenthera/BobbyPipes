@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.network.payload;
 
 import com.bobby.bobbypipes.BobbyPipes;
-import com.bobby.bobbypipes.network.RequestService;
+import com.bobby.bobbypipes.logistics.RequestService;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

@@ -2,7 +2,7 @@ package com.bobby.bobbypipes.client.screen;
 
 import com.bobby.bobbypipes.menu.PowerJunctionMenu;
 import com.bobby.bobbypipes.network.payload.PowerJunctionSyncPayload;
-import com.bobby.bobbypipes.network.power.PowerSpendKind;
+import com.bobby.bobbypipes.logistics.power.PowerSpendKind;
 import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
 import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
 import com.bobby.bobbycore.client.gui.layout.GuiLayout;

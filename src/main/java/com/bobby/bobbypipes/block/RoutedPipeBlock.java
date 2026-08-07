@@ -76,6 +76,12 @@ public class RoutedPipeBlock extends PipeBlock {
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level,
                                           BlockPos pos, Player player, InteractionHand hand,
                                           BlockHitResult hitResult) {
+        // Cover work outranks the screen. A request pipe opens on any bare click, so
+        // without this a chameleon cover could never be fitted to one.
+        InteractionResult cover = tryCoverInteraction(stack, state, level, pos, player);
+        if (cover != InteractionResult.PASS) {
+            return cover;
+        }
         // Sneak keeps the held item's normal use (bucket waterlogging, placing against the
         // pipe, ...). Without that escape hatch every click would be stolen by the UI.
         if (player.isSecondaryUseActive()) {
@@ -96,6 +102,12 @@ public class RoutedPipeBlock extends PipeBlock {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
+        // Same precedence as useItemOn: cover work first, or a request pipe would open its
+        // screen instead of letting go of its disguise.
+        InteractionResult cover = tryStripCover(state, level, pos, player);
+        if (cover != InteractionResult.PASS) {
+            return cover;
+        }
         if (opensWithoutWrench() && player instanceof ServerPlayer serverPlayer) {
             openPipeScreen(serverPlayer, level, pos);
             return InteractionResult.SUCCESS;

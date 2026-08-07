@@ -2,8 +2,8 @@ package com.bobby.bobbypipes.network.payload;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.client.ClientPowerJunctionGui;
-import com.bobby.bobbypipes.network.power.PowerSpendKind;
-import com.bobby.bobbypipes.network.power.PowerUsageSampler;
+import com.bobby.bobbypipes.logistics.power.PowerSpendKind;
+import com.bobby.bobbypipes.logistics.power.PowerUsageSampler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;

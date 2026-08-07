@@ -1,16 +1,29 @@
 package com.bobby.bobbypipes.block;
 
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.block.entity.PipeBlockEntity;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.registry.ModBlockEntities;
+import com.bobby.bobbypipes.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockAndLightGetter;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.ScheduledTickAccess;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.SimpleWaterloggedBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -18,9 +31,11 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jspecify.annotations.Nullable;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -41,9 +56,19 @@ import java.util.Map;
  * <p>Waterloggable so flowing water does not break the thin tube geometry; water fills the
  * empty space around the pipe instead.
  */
-public class PipeBlock extends Block implements SimpleWaterloggedBlock {
+public class PipeBlock extends Block implements SimpleWaterloggedBlock, EntityBlock {
 
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
+
+    /**
+     * Whether a chameleon cover is hiding this pipe.
+     *
+     * <p>Only whether, not what: the appearance is a {@link BlockState} on the block entity,
+     * because putting it here would multiply every pipe's state count by every block in the
+     * game. The flag has to be on the state all the same, since occlusion and the block
+     * shape are asked for by state alone with no position to look a block entity up from.
+     */
+    public static final BooleanProperty COVERED = BooleanProperty.create("covered");
 
     public static final EnumProperty<PipeConnection> NORTH =
             EnumProperty.create("north", PipeConnection.class);
@@ -90,6 +115,7 @@ public class PipeBlock extends Block implements SimpleWaterloggedBlock {
         super(properties);
         registerDefaultState(defaultBlockState()
                 .setValue(WATERLOGGED, false)
+                .setValue(COVERED, false)
                 .setValue(NORTH, PipeConnection.NONE)
                 .setValue(EAST, PipeConnection.NONE)
                 .setValue(SOUTH, PipeConnection.NONE)
@@ -114,7 +140,7 @@ public class PipeBlock extends Block implements SimpleWaterloggedBlock {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(WATERLOGGED, NORTH, EAST, SOUTH, WEST, UP, DOWN);
+        builder.add(WATERLOGGED, COVERED, NORTH, EAST, SOUTH, WEST, UP, DOWN);
     }
 
     @Override
@@ -210,16 +236,232 @@ public class PipeBlock extends Block implements SimpleWaterloggedBlock {
 
     @Override
     protected VoxelShape getOcclusionShape(BlockState state) {
-        // A pipe never fills its block, so neighbours must keep drawing their faces.
-        return Shapes.empty();
+        // A bare pipe never fills its block, so neighbours must keep drawing their faces.
+        // A covered one does fill it, and culling those faces is most of what the cover
+        // is for.
+        return state.getValue(COVERED) ? Shapes.block() : Shapes.empty();
     }
 
     @Override
     protected boolean propagatesSkylightDown(BlockState state) {
-        return true;
+        return !state.getValue(COVERED);
+    }
+
+    /**
+     * Reports the cover to neighbours that ask what this block looks like.
+     *
+     * <p>Connected-texture blocks and other appearance-sensitive neighbours then treat a
+     * covered pipe as one of their own, so a pipe threaded through a wall does not leave a
+     * seam where the wall's texture breaks around it.
+     */
+    @Override
+    public BlockState getAppearance(BlockState state, BlockAndLightGetter level, BlockPos pos,
+                                    Direction side, @Nullable BlockState queryState,
+                                    @Nullable BlockPos queryPos) {
+        if (state.getValue(COVERED)
+                && level.getBlockEntity(pos) instanceof PipeBlockEntity pipe
+                && pipe.getCover() != null) {
+            return pipe.getCover();
+        }
+        return super.getAppearance(state, level, pos, side, queryState, queryPos);
+    }
+
+    /**
+     * A cover holder, but only once there is a cover to hold.
+     *
+     * <p>Returning null is how a bare transport pipe stays block-entity free: there are a
+     * great many of them in a built network and none of them need one. Subclasses that
+     * always carry a block entity override this and inherit cover storage from
+     * {@link PipeBlockEntity} instead.
+     */
+    @Override
+    public @Nullable BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return state.getValue(COVERED)
+                ? new PipeBlockEntity(ModBlockEntities.PIPE_COVER.get(), pos, state)
+                : null;
+    }
+
+    @Override
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level,
+                                          BlockPos pos, Player player, InteractionHand hand,
+                                          BlockHitResult hitResult) {
+        InteractionResult cover = tryCoverInteraction(stack, state, level, pos, player);
+        if (cover != InteractionResult.PASS) {
+            return cover;
+        }
+        return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
+                                               Player player, BlockHitResult hitResult) {
+        InteractionResult cover = tryStripCover(state, level, pos, player);
+        if (cover != InteractionResult.PASS) {
+            return cover;
+        }
+        return super.useWithoutItem(state, level, pos, player, hitResult);
+    }
+
+    /**
+     * Undoes a cover a step at a time: sneak and click with empty hands.
+     *
+     * <p>First press takes the disguise off and hands the block back, leaving the cover
+     * fitted but blank. A second press takes the cover itself off. Changing what a run is
+     * disguised as therefore never means prising covers off and putting them back on, and
+     * fully removing one is still a single gesture repeated rather than a second tool.
+     *
+     * <p>Both hands must be empty, and that is not a style choice. Vanilla suppresses block
+     * interaction entirely when a sneaking player is holding anything
+     * ({@code ServerPlayerGameMode.useItemOn}), so a sneak gesture that involves a held item
+     * never reaches a block at all. Any cover removal bound to sneak-plus-tool would look
+     * reasonable and silently do nothing.
+     *
+     * @return {@link InteractionResult#PASS} when there is no cover here to undo
+     */
+    protected InteractionResult tryStripCover(BlockState state, Level level, BlockPos pos,
+                                              Player player) {
+        if (!state.getValue(COVERED) || !player.isSecondaryUseActive()) {
+            return InteractionResult.PASS;
+        }
+        // Read on both sides. The cover is synced, so the client reaches the same verdict
+        // and does not swing at a cover that has nothing to take off.
+        if (!(level.getBlockEntity(pos) instanceof PipeBlockEntity pipe)) {
+            return InteractionResult.PASS;
+        }
+        if (pipe.getCover() == null) {
+            return removeCover(state, level, pos, player);
+        }
+        if (!level.isClientSide()) {
+            BlockState previous = pipe.getCover();
+            pipe.setCover(null);
+            giveBack(level, pos, player, new ItemStack(previous.getBlock()));
+        }
+        level.playSound(player, pos, SoundEvents.WOOL_BREAK, SoundSource.BLOCKS, 1.0f, 1.0f);
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * Fits a cover, or gives an existing one a new disguise.
+     *
+     * <p>Routed pipes call this before their own wrench handling so the cover can be worked
+     * on without the pipe's screen swallowing the click. A plain wrench click on a covered
+     * pipe still opens the screen, which is the only way back into a pipe that is hidden.
+     *
+     * <p>Removal is not here: it lives in {@link #tryStripCover} on the empty-handed sneak
+     * path, because vanilla never delivers a sneak-with-item click to a block.
+     *
+     * @return {@link InteractionResult#PASS} when the click was not about a cover
+     */
+    protected InteractionResult tryCoverInteraction(ItemStack stack, BlockState state,
+                                                    Level level, BlockPos pos, Player player) {
+        boolean covered = state.getValue(COVERED);
+        if (player.isSecondaryUseActive()) {
+            return InteractionResult.PASS;
+        }
+        if (!covered && stack.is(ModItems.CHAMELEON_COVER.get())) {
+            return fitCover(state, level, pos, player, stack);
+        }
+        if (covered && stack.getItem() instanceof BlockItem blockItem) {
+            return setCoverAppearance(level, pos, player, stack, blockItem);
+        }
+        return InteractionResult.PASS;
+    }
+
+    private InteractionResult fitCover(BlockState state, Level level, BlockPos pos,
+                                       Player player, ItemStack stack) {
+        if (!level.isClientSide()) {
+            // State first: the block entity is only created once COVERED is set, so the
+            // cover has somewhere to live.
+            level.setBlockAndUpdate(pos, state.setValue(COVERED, true));
+            stack.consume(1, player);
+        }
+        level.playSound(player, pos, SoundEvents.METAL_PLACE, SoundSource.BLOCKS, 1.0f, 1.0f);
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult setCoverAppearance(Level level, BlockPos pos, Player player,
+                                                 ItemStack stack, BlockItem blockItem) {
+        BlockState appearance = blockItem.getBlock().defaultBlockState();
+        if (!canBeWorn(appearance, level, pos)) {
+            return InteractionResult.PASS;
+        }
+        if (!(level.getBlockEntity(pos) instanceof PipeBlockEntity pipe)) {
+            return InteractionResult.PASS;
+        }
+        if (!level.isClientSide()) {
+            BlockState previous = pipe.getCover();
+            pipe.setCover(appearance);
+            stack.consume(1, player);
+            // The old disguise comes back rather than being eaten, so re-texturing a long
+            // run does not quietly cost a block every time you change your mind.
+            if (previous != null) {
+                giveBack(level, pos, player, new ItemStack(previous.getBlock()));
+            }
+        }
+        level.playSound(player, pos, SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, 1.0f, 1.2f);
+        return InteractionResult.SUCCESS;
+    }
+
+    private InteractionResult removeCover(BlockState state, Level level, BlockPos pos,
+                                          Player player) {
+        if (!level.isClientSide()) {
+            BlockState appearance = level.getBlockEntity(pos) instanceof PipeBlockEntity pipe
+                    ? pipe.getCover()
+                    : null;
+            if (level.getBlockEntity(pos) instanceof PipeBlockEntity pipe) {
+                pipe.setCover(null);
+            }
+            level.setBlockAndUpdate(pos, state.setValue(COVERED, false));
+            // Pipes that only had a block entity to hold the cover lose it again. Vanilla
+            // will not do this for us: hasBlockEntity is decided per block, not per state,
+            // so an uncovered pipe still looks like it should have one.
+            if (level.getBlockEntity(pos) instanceof PipeBlockEntity pipe
+                    && pipe.getType() == ModBlockEntities.PIPE_COVER.get()) {
+                level.removeBlockEntity(pos);
+            }
+            giveBack(level, pos, player, new ItemStack(ModItems.CHAMELEON_COVER.get()));
+            if (appearance != null) {
+                giveBack(level, pos, player, new ItemStack(appearance.getBlock()));
+            }
+        }
+        level.playSound(player, pos, SoundEvents.METAL_BREAK, SoundSource.BLOCKS, 1.0f, 1.0f);
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * Whether a block is a sane thing to wear.
+     *
+     * <p>The test is the shape, not the mod it came from and not whether it has a block
+     * entity: any full cube from anywhere is fair game, which is the point of the cover.
+     * Modded machines are overwhelmingly full cubes with ordinary baked models and work
+     * fine, so refusing everything with a block entity would have ruled out most of what
+     * anyone actually wants to disguise a pipe as.
+     *
+     * <p>Shape also happens to exclude the blocks that would have come out wrong anyway.
+     * Chests, beds, signs and banners draw through a special renderer this cover does not
+     * run, and none of them are full cubes, so they fall out here for a reason that is
+     * about how they look rather than how they are implemented.
+     *
+     * <p>Other pipes are refused so a cover cannot mimic the thing it is hiding.
+     */
+    private static boolean canBeWorn(BlockState appearance, Level level, BlockPos pos) {
+        return !appearance.isAir()
+                && !(appearance.getBlock() instanceof PipeBlock)
+                && appearance.isCollisionShapeFullBlock(level, pos);
+    }
+
+    private static void giveBack(Level level, BlockPos pos, Player player, ItemStack stack) {
+        if (!player.getInventory().add(stack)) {
+            Block.popResource(level, pos, stack);
+        }
     }
 
     private VoxelShape shapeFor(BlockState state) {
+        if (state.getValue(COVERED)) {
+            // Arms are hidden under the cover, so every covered pipe is the same cube
+            // whatever it is connected to.
+            return Shapes.block();
+        }
         // DIRECT vs INDIRECT vs INVENTORY share the same arm geometry; collapse them so
         // the cache is not tripled for identical shapes. Waterlogging does not change the
         // solid shape either.

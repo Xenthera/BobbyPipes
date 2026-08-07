@@ -1,6 +1,6 @@
 package com.bobby.bobbypipes.transit;
 
-import com.bobby.bobbypipes.network.RoutingSnapshot;
+import com.bobby.bobbypipes.logistics.RoutingSnapshot;
 
 import java.util.ArrayList;
 import java.util.Collection;

@@ -9,7 +9,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 
 /**
  * Asks the server to drop one running craft job.

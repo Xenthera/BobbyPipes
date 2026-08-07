@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.block.entity;
 
 import com.bobby.bobbypipes.menu.PowerJunctionMenu;
-import com.bobby.bobbypipes.network.power.LogisticsPowerCosts;
+import com.bobby.bobbypipes.logistics.power.LogisticsPowerCosts;
 import com.bobby.bobbypipes.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

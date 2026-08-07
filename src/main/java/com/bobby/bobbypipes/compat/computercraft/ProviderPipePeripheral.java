@@ -2,7 +2,7 @@ package com.bobby.bobbypipes.compat.computercraft;
 
 import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
-import com.bobby.bobbypipes.network.ProviderAccess;
+import com.bobby.bobbypipes.logistics.ProviderAccess;
 import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;

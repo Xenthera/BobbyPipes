@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.compat.rs;
 
 import com.bobby.bobbypipes.compat.digital.DigitalNetworkStore;
-import com.bobby.bobbypipes.network.StorageIdentities;
+import com.bobby.bobbypipes.logistics.StorageIdentities;
 import com.refinedmods.refinedstorage.api.core.Action;
 import com.refinedmods.refinedstorage.api.network.Network;
 import com.refinedmods.refinedstorage.api.network.storage.StorageNetworkComponent;

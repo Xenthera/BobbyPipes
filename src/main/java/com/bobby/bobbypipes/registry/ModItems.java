@@ -40,6 +40,25 @@ public final class ModItems {
             });
 
     /**
+     * Hides a pipe inside a full block that can be made to look like any other block.
+     *
+     * <p>Right click a pipe to fit one, then right click the cover with any block to give
+     * it that block's appearance. Sneak and wrench a covered pipe to take it back off.
+     */
+    public static final DeferredItem<Item> CHAMELEON_COVER = ITEMS.registerItem("chameleon_cover",
+            props -> new Item(props) {
+                @Override
+                public void appendHoverText(ItemStack stack,
+                                            Item.TooltipContext context,
+                                            TooltipDisplay display,
+                                            Consumer<Component> lines,
+                                            TooltipFlag flag) {
+                    lines.accept(Component.translatable("item.bobbypipes.chameleon_cover.tip")
+                            .withStyle(ChatFormatting.GRAY));
+                }
+            });
+
+    /**
      * Head-slot visor that shows live status of the pipe under the crosshair in world.
      */
     public static final DeferredItem<Item> PIPE_GOGGLES = ITEMS.registerItem("pipe_goggles",

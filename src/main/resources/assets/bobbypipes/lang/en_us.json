@@ -126,6 +126,8 @@
   "menu.bobbypipes.provider_pipe": "Provider Pipe",
   "item.bobbypipes.wrench": "Pipe Wrench",
   "item.bobbypipes.wrench.tip": "Right click a pipe to open its settings",
+  "item.bobbypipes.chameleon_cover": "Chameleon Cover",
+  "item.bobbypipes.chameleon_cover.tip": "Right click a pipe to hide it, then right click with any full block to disguise it. Sneak with empty hands to undo",
   "item.bobbypipes.pipe_goggles": "Pipe Goggles",
   "item.bobbypipes.pipe_goggles.tip": "Wear on your head to see live status of the pipe you look at",
   "item.bobbypipes.parcel_cage": "Parcel Cage",

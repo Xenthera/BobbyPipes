@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.client.screen;
 
 import com.bobby.bobbypipes.menu.LinkPipeMenu;
-import com.bobby.bobbypipes.network.LinkPipeRegistry;
+import com.bobby.bobbypipes.logistics.LinkPipeRegistry;
 import com.bobby.bobbypipes.network.payload.SetLinkChannelPayload;
 import com.bobby.bobbypipes.pipes.LinkChannelResult;
 import com.bobby.bobbycore.client.gui.ThemedContainerScreen;

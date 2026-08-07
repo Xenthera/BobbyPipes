@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.menu;
 
 import com.bobby.bobbypipes.block.PipeBlock;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

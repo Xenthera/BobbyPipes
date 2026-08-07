@@ -1,14 +1,14 @@
 package com.bobby.bobbypipes.command;
 
-import com.bobby.bobbypipes.network.EnergyAccess;
-import com.bobby.bobbypipes.network.EnergyKind;
-import com.bobby.bobbypipes.network.EnergyRequestService;
-import com.bobby.bobbypipes.network.PipeNetwork;
-import com.bobby.bobbypipes.network.PipeNodeId;
-import com.bobby.bobbypipes.network.RouteTable;
-import com.bobby.bobbypipes.network.RequestService;
-import com.bobby.bobbypipes.network.RoutingSnapshot;
-import com.bobby.bobbypipes.network.SupplierReserves;
+import com.bobby.bobbypipes.logistics.EnergyAccess;
+import com.bobby.bobbypipes.logistics.EnergyKind;
+import com.bobby.bobbypipes.logistics.EnergyRequestService;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.PipeNodeId;
+import com.bobby.bobbypipes.logistics.RouteTable;
+import com.bobby.bobbypipes.logistics.RequestService;
+import com.bobby.bobbypipes.logistics.RoutingSnapshot;
+import com.bobby.bobbypipes.logistics.SupplierReserves;
 import com.bobby.bobbypipes.request.RequestPlan;
 import com.bobby.bobbypipes.transit.ParcelTier;
 import com.mojang.brigadier.CommandDispatcher;
@@ -212,7 +212,7 @@ public final class NetworkCommand {
     private static int reportJobs(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
         ServerLevel level = context.getSource().getLevel();
         PipeNetwork network = PipeNetwork.get(level);
-        List<com.bobby.bobbypipes.network.CraftJobManager.JobReport> entries =
+        List<com.bobby.bobbypipes.logistics.CraftJobManager.JobReport> entries =
                 network.craftJobs().describe(level, network);
         if (entries.isEmpty()) {
             reply(context, "No active craft jobs.");

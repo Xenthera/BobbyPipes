@@ -15,7 +15,7 @@ public interface DigitalNetworkStore {
     /**
      * Claim key so two providers on the same network do not double-count.
      *
-     * <p>Typically a {@link com.bobby.bobbypipes.network.StorageIdentities#refKey} over the
+     * <p>Typically a {@link com.bobby.bobbypipes.logistics.StorageIdentities#refKey} over the
      * grid / network object.
      */
     Object identity();

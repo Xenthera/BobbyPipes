@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.menu;
 
-import com.bobby.bobbypipes.network.NetworkSupply;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.NetworkSupply;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;

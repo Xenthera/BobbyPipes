@@ -11,7 +11,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import com.bobby.bobbypipes.compat.digital.DigitalNetworkStore;
-import com.bobby.bobbypipes.network.StorageIdentities;
+import com.bobby.bobbypipes.logistics.StorageIdentities;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

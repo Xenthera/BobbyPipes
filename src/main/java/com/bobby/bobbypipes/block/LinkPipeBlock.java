@@ -1,8 +1,8 @@
 package com.bobby.bobbypipes.block;
 
 import com.bobby.bobbypipes.block.entity.LinkPipeBlockEntity;
-import com.bobby.bobbypipes.network.LinkPipeRegistry;
-import com.bobby.bobbypipes.network.PipeNodeId;
+import com.bobby.bobbypipes.logistics.LinkPipeRegistry;
+import com.bobby.bobbypipes.logistics.PipeNodeId;
 import com.bobby.bobbypipes.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;

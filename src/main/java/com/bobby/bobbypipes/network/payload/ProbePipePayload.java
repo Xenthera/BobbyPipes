@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.network.payload;
 
 import com.bobby.bobbypipes.BobbyPipes;
-import com.bobby.bobbypipes.network.PipeProbe;
+import com.bobby.bobbypipes.logistics.PipeProbe;
 import com.bobby.bobbypipes.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;

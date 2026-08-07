@@ -52,6 +52,7 @@ public final class ModCreativeTabs {
                         // Items.
                         output.accept(ModItems.WRENCH.get());
                         output.accept(ModItems.PIPE_GOGGLES.get());
+                        output.accept(ModItems.CHAMELEON_COVER.get());
                     })
                     .build());
 

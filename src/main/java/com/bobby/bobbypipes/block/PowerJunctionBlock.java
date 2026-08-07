@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.block;
 
 import com.bobby.bobbypipes.block.entity.PowerJunctionBlockEntity;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.menu;
 
-import com.bobby.bobbypipes.network.EnergyRequestService;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.EnergyRequestService;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 import com.bobby.bobbypipes.network.payload.EnergyStockPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;

@@ -1,7 +1,7 @@
 package com.bobby.bobbypipes.block;
 
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
-import com.bobby.bobbypipes.network.PipeExtractRates;
+import com.bobby.bobbypipes.logistics.PipeExtractRates;
 import com.bobby.bobbypipes.pipes.ProviderSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;

@@ -1,24 +1,18 @@
 package com.bobby.bobbypipes.block.entity;
 
 import com.bobby.bobbypipes.menu.FluidSupplierPipeMenu;
-import com.bobby.bobbypipes.network.FluidAccess;
-import com.bobby.bobbypipes.network.FluidRequestService;
-import com.bobby.bobbypipes.network.PipeNetwork;
+import com.bobby.bobbypipes.logistics.FluidAccess;
+import com.bobby.bobbypipes.logistics.FluidRequestService;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
 import com.bobby.bobbypipes.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -31,7 +25,7 @@ import org.jspecify.annotations.Nullable;
  * with a fluid identity alongside the target amount since (unlike energy) there is more
  * than one kind of fluid.
  */
-public class FluidSupplierPipeBlockEntity extends BlockEntity implements MenuProvider {
+public class FluidSupplierPipeBlockEntity extends PipeBlockEntity implements MenuProvider {
 
     /** How often to scan for shortfall, same cadence as every other Supplier. */
     public static final int TICK_INTERVAL = 20;
@@ -93,7 +87,7 @@ public class FluidSupplierPipeBlockEntity extends BlockEntity implements MenuPro
             return;
         }
         if (!network.power().trySpend(worldPosition,
-                com.bobby.bobbypipes.network.power.PowerSpendKind.FLUID_SUPPLIER)) {
+                com.bobby.bobbypipes.logistics.power.PowerSpendKind.FLUID_SUPPLIER)) {
             return;
         }
         FluidRequestService.request(level, network, worldPosition, targetFluid, need, false);
@@ -121,15 +115,5 @@ public class FluidSupplierPipeBlockEntity extends BlockEntity implements MenuPro
         super.loadAdditional(input);
         targetFluid = input.read("target_fluid", FluidResource.CODEC).orElse(FluidResource.EMPTY);
         targetMb = input.read("target_mb", com.mojang.serialization.Codec.INT).orElse(0);
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        return saveWithoutMetadata(registries);
-    }
-
-    @Override
-    public @Nullable Packet<ClientGamePacketListener> getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
     }
 }

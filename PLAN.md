@@ -25,13 +25,17 @@ and JEI integration all exist.
 pipes, parcels synced and drawn in transit, satellite naming, pattern import from JEI,
 provider pulse budgeting, default routes.
 
-**Seven pipe types exist** and each has its own texture family, hue shifted by
-`tools/tint_pipes.py` so the green and red connection marks keep their exact colours:
-provider 22, request 158, passive supplier 195, basic 220, supplier 250, crafting 285,
-satellite 330.
+**Seven pipe types exist** and each has its own texture family, tinted at atlas-stitch time
+by `PipeCompositeSource` from the shared greyscale sources in `textures/pipe_base/`. No pipe
+texture is stored per pipe: a colour is one entry in `assets/minecraft/atlases/blocks.json`
+pointing at the same handful of base images. Hues are provider 22, request 158, passive
+supplier 195, basic 220, supplier 250, crafting 285, satellite 330.
 
-**Nothing costs power yet, nothing moves fluid, and there is no chassis.** Those three are
-the bulk of what is left and each is broken out under Phase 6 below.
+**Power and fluid have since landed; the chassis has not.** Power junctions with per-pipe
+draw exist (Phase 7), and fluid and energy ride the same routing graph as items with their
+own provider / request / supplier pipes (Phase 9). Those two phases below still carry
+unticked boxes and want a status pass. **The chassis is now the single largest thing left**,
+and Phase 8 is written out in full.
 
 **Multi-step crafting chains work.** Confirmed by play on 2026-08-03, including chains
 whose steps do not come from a Pattern Table. This was the long-standing broken feature and
@@ -248,8 +252,27 @@ Written **once**, natively in 26.1's render-state model
       `atNode`->`nextHop` via extract/submit (not the final BER)
 - [ ] Full parcel renderer (proper BER / host, animation polish)
 - [x] Sync parcels to the client (debug-quality full replace; Phase 4 may refine)
-- [ ] Connected-texture or seam handling where pipes meet blocks
+- [x] Connected-texture or seam handling where pipes meet blocks - a covered pipe reports
+      its cover through `getAppearance`, so neighbours texture against it
 - [ ] Performance pass on large networks (chunk rebuilds, flowing parcels)
+- [x] **Chameleon Cover** - a full-block disguise fitted to any pipe. Hides the tube, wears
+      any block's appearance, and is a solid occluder, so a covered run culls neighbouring
+      faces and blocks light instead of being a hole in the world. Parcels inside a covered
+      run are skipped before the per-frame model resolve in `ParcelRenderer`.
+
+      **Any full cube disguises it**, from any mod. The test is the collision shape, not
+      whether the block has a block entity, so modded machines work and chests, slabs and
+      stairs fall out for being the wrong shape rather than the wrong implementation.
+
+      **Pipe Goggles see through covers**, showing the real pipes and the parcels moving
+      inside them, so a covered network stays maintainable without tearing the covers off.
+      Wearing them suspends the parcel culling too, which is the cost of looking.
+
+      The cover is a `COVERED` flag on the pipe's own block state plus the imitated
+      `BlockState` on the block entity. The pipe block stays in the world, so the twenty-odd
+      `instanceof PipeBlock` checks across `network/` needed no changes at all. Drawing goes
+      through `ChameleonCoverModel`, a `DynamicBlockStateModel` that hands the imitated
+      block's baked parts straight through on the chunk mesher.
 
 ### Deliberately out of scope here
 
@@ -267,8 +290,9 @@ Item models in the world, held-item rendering and the guidebook.
 - [x] Supplier pipe (active) - nine ghost stock targets, requests its own shortfall once a
       second, cancels an unstarted craft when providers can cover the slot instead
 - [x] Passive supplier pipe - the same targets as a sink rather than a requester, see Phase 6
-- [ ] Chassis pipe with one module slot
-- [ ] Item Sink module (routes matching items to an inventory, using the Phase 3 filter)
+- [ ] Chassis pipe with one module slot - **moved to Phase 8**, which now carries the design
+- [ ] Item Sink module (routes matching items to an inventory, using the Phase 3 filter) -
+      **moved to Phase 8**
 - [x] Default route - Basic pipe GUI checkbox; space-aware excess sink
 - [x] `SinkFinder` - one answer to "where does an item with no destination go", used by
       drift, hopper intake and craft surplus alike. Passive suppliers outrank default
@@ -342,20 +366,171 @@ The chassis is what turns a fixed set of pipe types into a system. A chassis is 
 pipe with module slots; the modules supply the behaviour that is currently welded into each
 pipe class.
 
-- [ ] Chassis pipe Mk1, one module slot, using the Phase 3 `ITEM_FILTER` data component so
-      module config already travels on the item
-- [ ] Module as an item + a behaviour interface, resolved server side per slot
-- [ ] Item Sink module (Phase 5 carry-over) - the filter-driven counterpart to the passive
-      supplier's explicit targets
-- [ ] Provider, Active Supplier, Passive Supplier and Terminus modules. These should be the
-      existing pipe logic lifted into modules rather than reimplemented; the standalone
-      pipes stay as the convenient preset.
-- [ ] Chassis screen - module slots plus the selected module's own config panel (Phase 4)
-- [ ] Mk2 to Mk5: more slots, and the power cost per tier if Phase 7 has landed
+### What a chassis is, in four mechanics
+
+Read off observed LP behaviour, same rule as Phase 2: described in this mod's vocabulary,
+not lifted from its source.
+
+1. **Module is an item, and its config lives on the item.** Pull a module out with its
+   filter set and it keeps that filter in another chassis. The chassis itself stores
+   nothing but the stacks. Phase 3 already built exactly this and nothing uses it yet:
+   `ModDataComponents.ITEM_FILTER` was added so module config could travel on the item.
+2. **Slot order is priority order.** Deciding where a homeless item goes is one question
+   asked of the whole network: every router bids, highest priority wins, ties broken by
+   routing cost. A chassis polls its modules in slot order and bids the first one willing.
+   That one mechanism is what lets a handful of module types replace a pipe type per role.
+3. **Modules act on the chassis' attached inventories.** A provider module reads them, an
+   extractor pulls from them, a sink inserts into them.
+4. **Modules tick and cost power.** Active modules run on their own cadence and each spend
+   hits the network, through the junctions Phase 7 already built.
+
+### The blocker: roles are currently block classes
+
+Role is decided today by the type of the block or block entity, in at least six places:
+
+| Where | Check |
+|---|---|
+| `NetworkSupply` | `instanceof ProviderPipeBlock` |
+| `SinkFinder` | `instanceof PassiveSupplierPipeBlockEntity` |
+| `DefaultRouteFinder` | `instanceof BasicPipeBlockEntity && isDefaultRoute()` |
+| `ProviderAccess` | `instanceof ProviderPipeBlockEntity` for settings |
+| `PipeProbe` | block class to name the role in the probe overlay |
+| `EnergyRequestService`, `FluidRequestService` | `instanceof Energy/FluidProviderPipeBlock` |
+
+A chassis cannot answer any of them, because its role is whatever is in its slots this
+tick. So step one is **role extraction, not chassis**: every one of those becomes a question
+the block entity answers. Done while the standalone pipes are still the only implementers,
+it is a behaviour-preserving refactor that can be verified against the current build, and
+it is worth doing on its own merits even if the chassis slips - the fluid and energy pipes
+are already growing the same roles and the same `instanceof` ladder with them.
+
+```java
+// logistics/role/ - one interface per role, generic over the resource
+public interface ProviderRole<R>   { FilterList<R> providerFilter(); }
+public interface SinkRole<R>       { Optional<SinkBid> bidFor(R resource, int count); }
+public interface StockTargetRole<R>{ int targetFor(R resource); }
+public interface ExtractRole       { void extractTick(ServerLevel level); }
+
+public record SinkBid(int priority, int accept, int tiebreak) {}
+```
+
+Generic over `R` from the start, so `SinkFinder` becomes `SinkFinder<R>` and fluid gets one
+for free rather than a copy. That in turn wants `FilterList` / `MatchMode` generified off
+`ItemResource`, with `ItemFilterEntry` as the first implementation - see the fluid notes
+below, which is the other caller waiting on it.
+
+`SinkFinder`'s two hardcoded tiers collapse into one bid loop. The tiers become numbers:
+passive supplier bids 100, a default route bids 0, an Item Sink module bids whatever its
+config says. Current behaviour falls out of the general rule, which is the test that the
+generalisation is the right one.
+
+### Then the chassis
+
+- [ ] **`ChassisPipeBlock` Mk1 to Mk4** extending `RoutedPipeBlock`, one block per tier,
+      differing only in slot count. Tinted by `PipeCompositeSource` like everything else;
+      the seven existing hues leave room around 45 to 90 for a family of four.
+- [ ] **`ChassisPipeBlockEntity`** holds an `ItemStackHandler` and a `List<PipeModule>`
+      re-resolved whenever a slot changes. It implements every role interface and delegates
+      to whichever modules are present, folding the slot index into `SinkBid.tiebreak` so
+      earlier slots win within one chassis.
+- [ ] **`PipeModule`** behaviour interface plus a registry keyed by item. A plain
+      `Map<Item, PipeModule>` to start; the datapack-driven types already wanted in Phase 6
+      are the reason to make it a real registry later.
+- [ ] **Modules, lifted not reimplemented.** The standalone pipes stay as the pre-configured
+      early-game preset - they are already textured, screened and documented, and keeping
+      them is what gives the tier ladder a bottom rung.
+
+| Module | Lifted from |
+|---|---|
+| Provider | `ProviderPipeBlockEntity` + `ProviderAccess`, settings read from the module stack |
+| Item Sink | new; the filter-driven sibling of the passive supplier's explicit targets |
+| Passive Supplier | `PassiveSupplierPipeBlockEntity.targetFor` |
+| Active Supplier | `SupplierPipeBlockEntity.restock`, already a clean tick + restock pair |
+| Terminus | `BasicPipeBlockEntity.isDefaultRoute` |
+| Extractor / QuickSort | new, but `PipeExtract` and `SinkFinder` already do the work |
+
+`StockTargetPipeBlockEntity` is already the shared base of the active and passive supplier,
+and `SupplierPipeScreen` already takes a `passive` flag. Most of a module boundary is there.
+
+- [ ] **Chassis screen.** Slot row, and clicking a configured slot opens that role's
+      *existing* screen with a back button - `ProviderPipeScreen`, `SupplierPipeScreen` -
+      rather than a bespoke nested module GUI. The menus and payloads already exist; what
+      changes is that `SetProviderSettingsPayload` and `SetSupplierRequestsPayload` address
+      a `(pos, slot)` instead of a `pos`.
+- [ ] **Power.** Add module spend kinds to `LogisticsPowerCosts` plus a per-tier idle draw,
+      and charge them through `ComponentPower` the way `SUPPLIER` is charged today.
 - [ ] Wrench finally does something beyond opening screens (module insert / extract)
 
-Ordering note: this wants `SinkFinder` to consult modules, not just passive suppliers. The
-priority tiers it already has are the place that plugs into.
+### Deliberate deviation: keep multi-inventory
+
+LP's chassis serves the one inventory it faces, set with a wrench. `ProviderAccess` here
+deliberately offers *every* distinct adjacent inventory, with claim-set logic so two pipes
+on one chest do not double-count it. Reusing that is less code and less new UX than adding
+chassis orientation, and it costs nothing conceptually: a module operates on all adjacent
+stores. The wrench stays a config tool rather than growing an orientation mode.
+
+### Suggested order
+
+1. Role interfaces and the `SinkBid` model, standalone pipes only. No behaviour change.
+2. `PipeModule` + registry + Provider and Passive Supplier modules; Mk1, one slot, no GUI
+   past the slot itself.
+3. Chassis screen and sub-screen routing.
+4. Remaining modules, Mk2 to Mk4, power costs.
+
+Structure gap 5 below - `block/` at 39 flat files - is worth acting on at step 1, since this
+phase adds a chassis family and a `logistics/role/` package at the same time.
+
+---
+
+## Phase 8B - Chassis for fluid and energy
+
+Worth designing now even if it is built later, because it decides whether the Phase 8 role
+interfaces are generic or item-shaped, and that is a decision made in the first commit.
+
+**The ground truth.** There is one routing graph and three media ride it
+(`PipeNetwork.energyParcels`, `fluidParcels`, "on the same routing graph as items"). What
+separates the media is not routing, it is arms: `PipeMedium` gates which neighbours a pipe
+grows an arm toward, and it is a method on the *block*, so an item pipe cannot touch a tank.
+A chassis therefore cannot serve a chest and a tank unless its medium becomes dynamic.
+
+**Two ways to take that.**
+
+- **A. Three chassis families.** Item, fluid and energy chassis blocks, one module framework,
+  each module declaring the medium it needs. Trivially safe, and it matches how the pipe
+  families are already split. Costs the player three blocks and a lot of duplicated slots.
+- **B. One chassis, medium set from its modules.** The union of the installed modules' media,
+  defaulting to items when empty. One block does everything, which is the better toy.
+
+**Recommended: B, with the medium set stored as blockstate properties**, three booleans set
+when the slots change, rather than read from the block entity. `PipeMedium.presentAt`
+already takes a level and a position; what must not happen is arm computation reaching for a
+block entity during placement, when it may not exist yet - the classic way this goes wrong.
+Blockstate properties keep the connection code reading only state, which is what it reads
+today. If that proves fiddly, A is the fallback and no module code changes.
+
+- [ ] Decide A vs B and record it here before writing the first module
+- [ ] Generify `FilterList` / `MatchMode` off `ItemResource`. Fluid has a real resource
+      identity and wants the same tag and component predicates; energy does not have one at
+      all. This is the shared prerequisite and the reason the Phase 8 roles are `<R>`.
+- [ ] `SinkFinder<FluidResource>` for a Fluid Sink module, once the item one is generic
+- [ ] Fluid modules: Provider, Supplier (LP's `ModuleFluidSupplier`, the Phase 9 carry-over),
+      Sink. Filters apply.
+- [ ] Energy modules: Provider, Supplier (top an adjacent machine's buffer to a threshold),
+      Terminus. **No filters at all** - energy has a single implicit kind, so an energy
+      module's only config is a threshold and a priority number. Do not force it through the
+      filter UI for symmetry's sake.
+- [ ] Power costs map onto existing kinds. `PowerSpendKind` already has `ENERGY_PROVIDER`,
+      `ENERGY_SUPPLIER`, `FLUID_PROVIDER`, `FLUID_SUPPLIER`; a module spend is the same kind
+      the standalone pipe charges, so tiering is the only new number.
+
+**The one real hazard: energy modules can deadlock the network.** Phase 7's rule is that a
+brownout is a stall and never a loss, and a stall is safe for items - the parcel waits. It
+is not safe for the module whose job is delivering power: a network that browns out cannot
+pay for the energy supplier module that would end the brownout, and it never recovers
+without manual intervention. Energy provider and supplier modules must either be exempt from
+the power charge or be charged against the junction they are *delivering to* rather than the
+one they draw from. Decide this when energy modules are written, not after the first bug
+report, and cover it with a test in the pure power accounting layer.
 
 ---
 
@@ -364,12 +539,64 @@ priority tiers it already has are the place that plugs into.
 - [ ] Fluid transport pipe, the plain-pipe equivalent for `FluidResource`
 - [ ] Fluid provider and request pipes, reusing the routing graph rather than a second one.
       The topology is about pipes, not about what flows through them.
-- [ ] Fluid supplier (LP's `ModuleFluidSupplier`) once Phase 8 exists
+- [ ] Fluid supplier (LP's `ModuleFluidSupplier`) once Phase 8 exists - see Phase 8B, which
+      also decides whether fluid gets its own chassis family or shares one block
 - [ ] Decide the transit model: fluid as discrete parcels reuses `ParcelTracker` whole,
       which is the cheap answer, but does not look like flow. A continuous model looks
       right and needs its own tracker.
 - [ ] Tank interop through NeoForge's fluid capability, both directions
 - [ ] Request screen shows fluids alongside items, with buckets as the unit
+
+---
+
+## Structure - how this compares to the mods it sits beside
+
+Reviewed 2026-08-07 against AE2, Mekanism, EnderIO and Create: the NeoForge mods of
+comparable scope. 226 source files, 27k lines.
+
+**Ahead of the pack.** Twenty-two test classes over routing, planning, topology and filters,
+where most Minecraft mods have none, and they are real tests rather than smoke tests. The
+`registry/` package is textbook `DeferredRegister` layout. Class javadoc explains *why*
+rather than restating the signature, which is rarer than the test coverage is.
+`PipeCompositeSource` - baking every pipe colour from one shared source image at
+atlas-stitch time - is a better idea than the per-pipe PNG sets AE2 and Mekanism both ship.
+
+**Gaps, worst first.**
+
+1. ~~No shared block entity base.~~ **Fixed 2026-08-07.** Thirteen block entities each
+   re-implemented the same save/load/sync boilerplate. AE2 has `AEBaseBlockEntity`,
+   Mekanism `TileEntityMekanism`, EnderIO `EnderBlockEntity`; the eight pipe ones now share
+   `PipeBlockEntity`, which is also where cover state lives.
+
+2. ~~No datagen.~~ **Wired 2026-08-07, blockstates only.** `PipeModelProvider` generates all
+   fifteen pipe blockstates into `src/generated/resources` from three shared layouts -
+   plain, routed and link - replacing 450 hand-written multipart cases. Verified case for
+   case against the files it replaced before those were deleted.
+
+   Two things fell out of doing it. The layouts are built from the real `Property` objects,
+   so a case naming a property its block does not have now fails to compile rather than
+   failing silently at load. And the `src/generated/**/.cache` exclude in `build.gradle` had
+   never matched anything - resource excludes are relative to the source directory - so the
+   datagen cache shipped inside the mod jar the moment generation produced output.
+
+   Still hand-written: the ~100 pipe *model* JSONs. Their geometry carries aspect-corrected
+   UVs worth more than the repetition costs, and re-deriving it through a builder risks
+   silently worse output. The way in, when it is worth it, is to extract seven shared
+   geometry parents and generate thin texture-only children.
+
+3. ~~`network/` means two unrelated things.~~ **Split 2026-08-07.** The logistics engine
+   moved to `logistics/` (46 files, including `craft/` and `power/`), leaving `network/` as
+   packets only - `ModPayloads` and `payload/`. Matches AE2 and Mekanism, where `network/`
+   means networking.
+
+4. ~~`ParcelDebugRenderer` is misnamed.~~ **Renamed 2026-08-07** to `ParcelRenderer`. It is
+   the production in-pipe item renderer; only `ClientChunkLoaderDebug` and
+   `PipeProbeRenderer` are genuinely debug.
+
+5. **`block/` is 39 flat files.** Readable at this size; AE2 and Mekanism subdivide by domain
+   past about thirty. Worth splitting when the chassis lands, not before.
+
+6. **No `api/` package.** Correct for pre-alpha. Don't build one until an addon asks.
 
 ---
 
@@ -379,6 +606,6 @@ priority tiers it already has are the place that plugs into.
 |---|---|
 | 26.1 API churn (NeoForge still `-beta`) | Exact version pins; upgrade deliberately, not automatically |
 | Scope - LP is one of the largest mods ever written | Phase 5 slice before any Phase 6 breadth |
-| Seven pipe hues and only so much room between the green and red marks | `tools/tint_pipes.py` windows the shift by hue so marks survive; past about eight families, shape or emblem has to carry the difference (Phase 4B) |
+| Seven pipe hues and only so much room between the green and red marks | `PipeCompositeSource` tints only the greyscale body base and composites the marks on top unmodified, so they always survive; past about eight families, shape or emblem has to carry the difference (Phase 4B) |
 | GUI work cannot be verified the way item movement was | Screens need eyeballing; logic stays in testable non-Minecraft classes where possible |
 | Ecosystem not yet on 26.1 | Costs nothing - no integrations planned until Phase 6 |

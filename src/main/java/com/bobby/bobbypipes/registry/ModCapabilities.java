@@ -42,7 +42,7 @@ public final class ModCapabilities {
                 // opposite would have let an item turn straight back into the hopper.
                 (level, pos, state, be, side) ->
                         level instanceof net.minecraft.server.level.ServerLevel serverLevel
-                                ? new com.bobby.bobbypipes.network.PipeDriftIntake(
+                                ? new com.bobby.bobbypipes.logistics.PipeDriftIntake(
                                         serverLevel, pos, side)
                                 : null,
                 ModBlocks.PIPE.get());

@@ -10,6 +10,7 @@ import com.bobby.bobbypipes.block.entity.EnergySupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.FluidSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PassiveSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
+import com.bobby.bobbypipes.block.entity.PipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PowerJunctionBlockEntity;
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SatellitePipeBlockEntity;
@@ -26,6 +27,23 @@ public final class ModBlockEntities {
 
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, BobbyPipes.MOD_ID);
+
+    /**
+     * Cover holder for pipes that carry no block entity of their own.
+     *
+     * <p>Only created once such a pipe is covered; a bare transport pipe stays block-entity
+     * free. Pipes that already have one (basic, provider, ...) inherit the same cover state
+     * from {@link com.bobby.bobbypipes.block.entity.PipeBlockEntity} and do not use this type.
+     */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PipeBlockEntity>> PIPE_COVER =
+            BLOCK_ENTITIES.register("pipe_cover", () -> new BlockEntityType<>(
+                    (pos, state) -> new PipeBlockEntity(ModBlockEntities.PIPE_COVER.get(), pos, state),
+                    Set.of(ModBlocks.PIPE.get(),
+                            ModBlocks.REQUEST_PIPE.get(),
+                            ModBlocks.ENERGY_PROVIDER_PIPE.get(),
+                            ModBlocks.ENERGY_REQUEST_PIPE.get(),
+                            ModBlocks.FLUID_PROVIDER_PIPE.get(),
+                            ModBlocks.FLUID_REQUEST_PIPE.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BasicPipeBlockEntity>> BASIC_PIPE =
             BLOCK_ENTITIES.register("basic_pipe", () -> new BlockEntityType<>(

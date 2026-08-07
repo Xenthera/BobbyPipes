@@ -23,7 +23,10 @@ sourceSets.main.resources {
 
     // Exclude common development only resources from finalized outputs
     exclude("**/*.bbmodel") // BlockBench project files
-    exclude("src/generated/**/.cache") // datagen cache files
+    // Datagen cache files. Resource excludes are relative to each source directory, not to
+    // the project, so a "src/generated/..." pattern never matched and the cache shipped
+    // inside the mod jar the moment datagen produced anything.
+    exclude("**/.cache/**")
 }
 
 // Local CC:Tweaked jars for soft-optional ComputerCraft peripherals (compile + runClient).
@@ -390,5 +393,46 @@ tasks.register('packageModZip', Zip) {
 ['runClient', 'runClient2', 'runServer'].each { runName ->
     tasks.named(runName).configure {
         dependsOn tasks.named('packageModZip')
+    }
+}
+
+// --- Modpack mods folder -----------------------------------------------------
+// Every jar runClient loads, flattened into one directory to drop into a modpack
+// instance: this mod, the sibling BobbyCore and BobbyChests builds, and every
+// optional runtime. Unlike packageModZip this names nothing - it takes whatever
+// localRuntime actually resolves to, so a new mod added to dependencies{} is
+// picked up without editing a second include list.
+//
+//   ./gradlew collectMods                        -> build/modpack/mods
+//   ./gradlew collectMods -Pmodpack.out=<dir>    -> <dir>
+//
+// The default output is a Sync, so repeat runs clear out jars left by an earlier
+// version bump. An overridden output is a plain Copy instead: pointing a Sync at
+// a real instance's mods/ folder would delete every other mod in it.
+
+def modpackOverride = providers.gradleProperty('modpack.out').getOrNull()
+def modpackDir = modpackOverride != null
+        ? file(modpackOverride)
+        : layout.buildDirectory.dir('modpack/mods').get().asFile
+
+tasks.register('collectMods', modpackOverride != null ? Copy : Sync) {
+    // Same group as runClient / runServer so it sits with them in `gradlew tasks` and in
+    // the IDE Gradle panel - it is a "go play with this" task, not a release artifact.
+    group = 'mod development'
+    description = 'Copies every mod jar runClient loads into one folder for modpack testing.'
+    dependsOn tasks.named('jar')
+
+    into modpackDir
+
+    from(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    from(configurations.localRuntime)
+
+    exclude '*-sources.jar', '*-javadoc.jar', '*-api.jar', '*-slim.jar'
+
+    def target = modpackDir
+    doLast {
+        def jars = (target.listFiles() ?: [] as File[]).findAll { it.name.endsWith('.jar') }
+        logger.lifecycle("${jars.size()} mod jars -> ${target}")
+        jars.toSorted { it.name }.each { logger.lifecycle("  ${it.name}") }
     }
 }

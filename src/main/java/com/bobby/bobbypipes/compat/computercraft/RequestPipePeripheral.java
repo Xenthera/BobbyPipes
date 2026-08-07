@@ -1,9 +1,9 @@
 package com.bobby.bobbypipes.compat.computercraft;
 
 import com.bobby.bobbypipes.BobbyPipes;
-import com.bobby.bobbypipes.network.NetworkSupply;
-import com.bobby.bobbypipes.network.PipeNetwork;
-import com.bobby.bobbypipes.network.RequestService;
+import com.bobby.bobbypipes.logistics.NetworkSupply;
+import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.RequestService;
 import com.bobby.bobbypipes.request.Demand;
 import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaFunction;

@@ -1,6 +1,6 @@
 package com.bobby.bobbypipes.compat;
 
-import com.bobby.bobbypipes.network.StorageIdentities;
+import com.bobby.bobbypipes.logistics.StorageIdentities;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.lang.reflect.Method;
