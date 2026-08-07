@@ -1,0 +1,12 @@
+{
+  "name": "Crafting Pipe",
+  "icon": "bobbypipes:crafting_pipe",
+  "category": "bobbypipes:crafting",
+  "sortnum": 1,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Crafting Pipe works in BobbyPipes."
+    }
+  ]
+}

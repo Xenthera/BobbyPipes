@@ -1,0 +1,22 @@
+{
+  "name": "CC Overview",
+  "icon": "bobbypipes:basic_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 0,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "With $(thing)CC:Tweaked$() installed, BobbyPipes exposes Lua peripherals on selected pipes.$(br2)$(note)Finding peripherals$()$(br)$(code)peripheral.getNames()$()$(br)$(code)peripheral.wrap($(str)\"left\"$())$()$(br2)All methods run on the $(thing)main server thread$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "Ids & style",
+      "text": "$(note)Item / fluid ids$()$(br)Registry names: $(str)minecraft:oak_log$(), $(str)minecraft:water$().$(br2)$(note)Legend$()$(br)$(li)$(method)methodName$() — function$(br)$(li)$(param)param$() — argument$(br)$(li)$(field)field$() — table key$(br)$(li)$(str)\"string\"$() — string literal$(br)$(li)$(type)type$() — type hint"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "Supported pipes",
+      "text": "$(li)$(l:bobbypipes:cc_request_pipe)Request Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_energy_request_pipe)Energy Request Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_fluid_request_pipe)Fluid Request Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_provider_pipe)Provider Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_crafting_pipe)Crafting Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_link_pipe)Link Pipe$(/l)$(br)$(li)$(l:bobbypipes:cc_satellite_pipe)Satellite Pipe$(/l)$(br2)Other pipes do not expose a peripheral in this version."
+    }
+  ]
+}

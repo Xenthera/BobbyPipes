@@ -1,0 +1,6 @@
+{
+  "name": "Item Pipes",
+  "description": "Transport, provide, request, and supply items.",
+  "icon": "bobbypipes:pipe",
+  "sortnum": 1
+}

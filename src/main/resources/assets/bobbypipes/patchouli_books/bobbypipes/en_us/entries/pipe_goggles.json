@@ -1,0 +1,12 @@
+{
+  "name": "Pipe Goggles",
+  "icon": "bobbypipes:pipe_goggles",
+  "category": "bobbypipes:tools",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Pipe Goggles works in BobbyPipes."
+    }
+  ]
+}

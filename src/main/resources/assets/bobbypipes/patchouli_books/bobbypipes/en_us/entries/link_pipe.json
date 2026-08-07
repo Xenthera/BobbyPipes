@@ -1,0 +1,12 @@
+{
+  "name": "Link Pipe",
+  "icon": "bobbypipes:link_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 3,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Link Pipe works in BobbyPipes."
+    }
+  ]
+}

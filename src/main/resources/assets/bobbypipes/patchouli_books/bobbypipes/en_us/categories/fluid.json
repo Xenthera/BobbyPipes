@@ -1,0 +1,6 @@
+{
+  "name": "Fluid Pipes",
+  "description": "Move fluids across the network.",
+  "icon": "bobbypipes:fluid_provider_pipe",
+  "sortnum": 3
+}

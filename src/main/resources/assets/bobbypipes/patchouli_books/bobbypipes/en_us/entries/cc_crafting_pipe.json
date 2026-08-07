@@ -1,0 +1,27 @@
+{
+  "name": "CC: Crafting Pipe",
+  "icon": "bobbypipes:crafting_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 5,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Read the programmed pattern and local craft-job status.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:crafting_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getOutput",
+      "text": "$(method)getOutput()$()$(br2)Primary pattern output, or $(kw)nil$() if empty.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$()$(li)$(field)count$() $(type)number$()$(br2)$(note)Example$()$(br)$(code)$(kw)local$() out = p.$(method)getOutput()$()$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "hasPattern / getSatellite",
+      "text": "$(method)hasPattern()$()$(br)$(method)getSatellite()$()$(br2)$(method)hasPattern()$() — $(type)boolean$() when a non-empty pattern is set.$(br2)$(method)getSatellite()$() — satellite name $(type)string$(), or $(kw)nil$() if unset.$(br2)$(note)Example$()$(br)$(code)$(kw)if$() p.$(method)hasPattern()$() $(kw)then$() ... $(kw)end$()$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "listJobs",
+      "text": "$(method)listJobs()$()$(br2)Status rows for craft jobs on $(thing)this$() crafter.$(br2)$(note)Returns$()$(br)$(li)$(field)headline$() $(type)string$() — short status line$(li)$(field)detail$() $(type)table$() — list of detail strings$(br2)$(note)Example$()$(br)$(code)$(kw)local$() jobs = p.$(method)listJobs()$()$()"
+    }
+  ]
+}

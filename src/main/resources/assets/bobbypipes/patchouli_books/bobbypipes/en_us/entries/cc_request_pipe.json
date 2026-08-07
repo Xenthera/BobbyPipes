@@ -1,0 +1,32 @@
+{
+  "name": "CC: Request Pipe",
+  "icon": "bobbypipes:request_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 1,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Ask the item network for stock and commit requests from Lua.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:request_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getAvailable",
+      "text": "$(method)getAvailable()$()$(br2)Catalog of free stock (and craftable flags) visible from this request pipe.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() — item id$(li)$(field)count$() $(type)number$() — free stock$(li)$(field)craftable$() $(type)boolean$() — craftable on this network$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)getAvailable()$()$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getItemCount",
+      "text": "$(method)getItemCount$()($(param)itemId$())$(br2)Free provider stock of one item (not craft-only availability).$(br2)$(note)Returns$()$(br)$(li)$(type)number$() — count, or $(code)0$() if none$(br2)$(note)Example$()$(br)$(code)p.$(method)getItemCount$()($(str)\"minecraft:oak_log\"$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "request",
+      "text": "$(method)request$()($(param)itemId$(), $(param)count$())$(br2)Commits whatever the network can source right now (same idea as the Request GUI).$(br2)$(note)Returns$()$(br)$(li)$(field)shipped$() $(type)number$() — accepted onto the network$(li)$(field)requested$() $(type)number$() — your ask$(li)$(field)complete$() $(type)boolean$() — shipped >= requested$(br2)$(note)Example$()$(br)$(code)p.$(method)request$()($(str)\"minecraft:oak_log\"$(), $(code)64$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "canRequest",
+      "text": "$(method)canRequest$()($(param)itemId$(), $(param)count$())$(br2)Plans only — does $(thing)not$() commit anything.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$() — full ask is possible$(li)$(field)missing$() $(type)table?$() — list of {$(field)name$(), $(field)count$()}$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(str)\"minecraft:diamond\"$(), $(code)16$())$()"
+    }
+  ]
+}

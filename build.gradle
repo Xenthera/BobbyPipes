@@ -26,12 +26,29 @@ sourceSets.main.resources {
     exclude("src/generated/**/.cache") // datagen cache files
 }
 
+// Local CC:Tweaked jars for soft-optional ComputerCraft peripherals (compile + runClient).
+// Maven (maven.squiddev.cc) has a known packaging issue for this MC line; use local jars.
+def extraModsDir = "extra-mods"
+def extraLibsDir = "extra-libs"
+
 repositories {
     // Needed for JUnit. Minecraft and NeoForge come from the moddev plugin's own repos.
     mavenCentral()
+    flatDir {
+        name "extra-mods"
+        dir file(extraModsDir)
+    }
+    flatDir {
+        name "extra-libs"
+        dir file(extraLibsDir)
+    }
     maven {
         name = 'BlameJared'
         url = 'https://maven.blamejared.com'
+        content {
+            includeGroup 'mezz.jei'
+            includeGroup 'vazkii.patchouli'
+        }
     }
     maven {
         name = 'CurseMaven'
@@ -183,6 +200,14 @@ dependencies {
     compileOnly "curse.maven:refined-storage-243076:${refinedstorage_file}"
     localRuntime "curse.maven:refined-storage-243076:${refinedstorage_file}"
 
+    // Optional ComputerCraft:Tweaked — local jars in extra-libs / extra-mods (Maven broken for this build).
+    addLocalArtifacts('compileOnly', extraLibsDir, "extra-libs")
+    addLocalArtifacts('localRuntime', extraModsDir)
+
+    // Optional Patchouli: API at compile time, full mod for runClient.
+    compileOnly "vazkii.patchouli:patchouli-neoforge:${patchouli_version}:api"
+    localRuntime "vazkii.patchouli:patchouli-neoforge:${patchouli_version}"
+
     implementation "com.bobby.bobbycore:bobbycore:${bobbycore_version}"
 
     // Optional sibling for pipes-vs-chests testing in runClient.
@@ -269,6 +294,17 @@ idea {
     }
 }
 
+def addLocalArtifacts(configurationName, dir, prefix = "extra-mods") {
+    for (extraModJar in fileTree(dir: dir, include: '*.jar')) {
+        def basename = extraModJar.name.substring(0, extraModJar.name.length() - ".jar".length())
+        def versionSep = basename.lastIndexOf('-')
+        assert versionSep != -1
+        def artifactId = basename.substring(0, versionSep)
+        def version = basename.substring(versionSep + 1)
+        dependencies.add(configurationName, "${prefix}:$artifactId:$version")
+    }
+}
+
 // --- Multiplayer handoff zip -------------------------------------------------
 // Builds build/dist/bobbypipes-<version>-mp.zip with the mod jar (+ optional
 // sibling bobbychests if already built) and a short install note. Wired to run
@@ -291,8 +327,8 @@ On each machine (and the dedicated server, if any):
 JEI is included so the pattern-table "+" can paste ghost recipes.
 Keep the pattern table open, look up a crafting recipe in JEI, click "+".
 
-Jade, AE2, and Refined Storage are optional soft deps (same idea as JEI) for future
-network-bridge tooling; they are not required to play BobbyPipes.
+Jade, AE2, Refined Storage, Patchouli, and ComputerCraft:Tweaked are optional soft deps
+(same idea as JEI) for tooling / guide / peripherals; they are not required to play BobbyPipes.
 """.stripIndent()
 
 tasks.register('writeMpInstallNote') {

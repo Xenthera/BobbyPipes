@@ -35,10 +35,25 @@ public final class RequestService {
      * delivered; they complete later via {@link CraftJobManager}. Prefer this field as
      * "accepted" when reading GUI/status copy.
      *
-     * @param shipped   how many of the demand item were accepted (queue and/or craft)
-     * @param requested how many the player asked for
+     * <p>{@code failKey} / {@code failDetail} explain a zero-ship commit (route missing,
+     * source unloaded, etc.). Empty when the ask was accepted or the failure is already
+     * described by plan shortfalls.
+     *
+     * @param shipped    how many of the demand item were accepted (queue and/or craft)
+     * @param requested  how many the player asked for
+     * @param failKey    translation key for the failure, or empty
+     * @param failDetail optional detail (positions, dims), or empty
      */
-    public record Commitment(int shipped, int requested) {
+    public record Commitment(int shipped, int requested, String failKey, String failDetail) {
+
+        public Commitment(int shipped, int requested) {
+            this(shipped, requested, "", "");
+        }
+
+        public Commitment {
+            failKey = failKey == null ? "" : failKey;
+            failDetail = failDetail == null ? "" : failDetail;
+        }
 
         public boolean isComplete() {
             return shipped >= requested;
@@ -46,6 +61,10 @@ public final class RequestService {
 
         public int shortfall() {
             return Math.max(0, requested - shipped);
+        }
+
+        public boolean hasFailReason() {
+            return !failKey.isEmpty();
         }
     }
 
@@ -162,7 +181,8 @@ public final class RequestService {
         RequestPlan<PipeNodeId, ItemResource> plan =
                 RequestPlanner.plan(new Demand<>(item, count), supply);
         if (plan.isEmpty()) {
-            return new Outcome(plan, new Commitment(0, count));
+            return new Outcome(plan, new Commitment(0, count,
+                    "chat.bobbypipes.request.fail.no_stock", ""));
         }
         if (plan.isComplete()) {
             // Commit this plan directly so a second re-plan cannot collapse a multi-crafter
@@ -171,15 +191,19 @@ public final class RequestService {
         }
         int want = satisfiableAmount(plan, item);
         if (want <= 0) {
-            return new Outcome(plan, new Commitment(0, count));
+            return new Outcome(plan, new Commitment(0, count,
+                    "chat.bobbypipes.request.fail.missing", ""));
         }
         RequestPlan<PipeNodeId, ItemResource> partial =
                 RequestPlanner.plan(new Demand<>(item, want), supply);
         if (!partial.isComplete()) {
-            return new Outcome(plan, new Commitment(0, count));
+            return new Outcome(plan, new Commitment(0, count,
+                    "chat.bobbypipes.request.fail.missing", ""));
         }
         Commitment commitment = commit(level, network, partial, at, item, want, excludedStores);
-        return new Outcome(plan, new Commitment(commitment.shipped(), count));
+        // Preserve commit-time route failures while reporting shipped against the original ask.
+        return new Outcome(plan, new Commitment(
+                commitment.shipped(), count, commitment.failKey(), commitment.failDetail()));
     }
 
     /**
@@ -245,12 +269,15 @@ public final class RequestService {
         // intermediates sitting in pattern tables. The caller still gets the shortfall
         // breakdown so the player is told exactly what to go and get.
         if (!plan.isComplete()) {
-            return new Commitment(0, requestedAmount);
+            return new Commitment(0, requestedAmount,
+                    "chat.bobbypipes.request.fail.missing", "");
         }
 
         int accepted = 0;
         int stillNeedFromCraft = Math.max(0, requestedAmount);
         PipeNodeId destNode = PipeNodeId.of(level, requester);
+        String failKey = "";
+        String failDetail = "";
 
         // Withdrawals are now only what heads straight for the requester; stock feeding a
         // craft is bound inside its craft step, so the old item-name filter is gone. That
@@ -259,10 +286,18 @@ public final class RequestService {
         for (RequestPlan.Withdrawal<PipeNodeId, ItemResource> withdrawal : plan.withdrawals()) {
             PipeNodeId sourceNode = withdrawal.source();
             if (!sourceNode.equals(destNode) && !network.canDeliver(sourceNode, destNode)) {
+                if (failKey.isEmpty()) {
+                    failKey = "chat.bobbypipes.request.fail.no_route";
+                    failDetail = formatNode(sourceNode) + " → " + formatNode(destNode);
+                }
                 continue;
             }
             ServerLevel sourceLevel = LinkPipeRegistry.levelOf(level.getServer(), sourceNode);
             if (sourceLevel == null) {
+                if (failKey.isEmpty()) {
+                    failKey = "chat.bobbypipes.request.fail.source_unloaded";
+                    failDetail = formatNode(sourceNode);
+                }
                 continue;
             }
             PipeNetwork sourceNetwork = PipeNetwork.get(sourceLevel);
@@ -283,7 +318,16 @@ public final class RequestService {
         network.craftJobs().tick(level, network);
         network.sendQueue().tick(level, network, network.ledger(), network.parcels(), network.routes());
 
-        return new Commitment(accepted, requestedAmount);
+        if (accepted <= 0 && failKey.isEmpty() && !plan.withdrawals().isEmpty()) {
+            failKey = "chat.bobbypipes.request.fail.commit";
+        }
+        return new Commitment(accepted, requestedAmount, failKey, failDetail);
+    }
+
+    private static String formatNode(PipeNodeId node) {
+        BlockPos pos = node.pos();
+        return node.dimensionLocation() + " @ "
+                + pos.getX() + "," + pos.getY() + "," + pos.getZ();
     }
 
     /**

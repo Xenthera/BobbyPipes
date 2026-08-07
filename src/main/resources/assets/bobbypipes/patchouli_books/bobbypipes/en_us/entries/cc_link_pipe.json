@@ -1,0 +1,27 @@
+{
+  "name": "CC: Link Pipe",
+  "icon": "bobbypipes:link_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 6,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Configure and inspect wormhole channel pairing (same or other dimension).$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:link_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getChannel / setChannel",
+      "text": "$(method)getChannel()$()$(br)$(method)setChannel$()($(param)id$())$(br2)$(method)getChannel()$() — current channel ($(code)0$() = unpaired).$(br2)$(method)setChannel$()($(param)id$()) — claim a channel, or $(code)0$() to release. Throws if the channel already has two other endpoints.$(br2)$(note)Example$()$(br)$(code)p.$(method)setChannel$()($(code)42$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getStatus",
+      "text": "$(method)getStatus()$()$(br2)Pairing / link state as a short string.$(br2)$(note)Returns$()$(br)$(li)$(type)string$() — $(str)idle$(), $(str)waiting$(), $(str)linked$(), or $(str)severed$()$(br2)$(note)Example$()$(br)$(code)$(kw)print$()(p.$(method)getStatus()$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getPeer",
+      "text": "$(method)getPeer()$()$(br2)Peer endpoint when paired and the peer chunk is loaded; otherwise $(kw)nil$().$(br2)$(note)Returns$()$(br)$(li)$(field)dimension$() $(type)string$()$(li)$(field)x$() / $(field)y$() / $(field)z$() $(type)number$()$(br2)$(note)Example$()$(br)$(code)$(kw)local$() peer = p.$(method)getPeer()$()$()"
+    }
+  ]
+}

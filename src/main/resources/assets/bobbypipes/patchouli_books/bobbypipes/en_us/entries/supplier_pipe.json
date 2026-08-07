@@ -1,0 +1,12 @@
+{
+  "name": "Supplier Pipe",
+  "icon": "bobbypipes:supplier_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 6,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Supplier Pipe works in BobbyPipes."
+    }
+  ]
+}

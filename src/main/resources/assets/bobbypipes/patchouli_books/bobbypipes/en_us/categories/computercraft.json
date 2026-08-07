@@ -1,0 +1,6 @@
+{
+  "name": "ComputerCraft",
+  "description": "Lua peripheral APIs for BobbyPipes (requires CC:Tweaked).",
+  "icon": "bobbypipes:request_pipe",
+  "sortnum": 6
+}

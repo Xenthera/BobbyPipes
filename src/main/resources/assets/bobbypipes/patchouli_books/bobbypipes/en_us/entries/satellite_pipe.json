@@ -1,0 +1,12 @@
+{
+  "name": "Satellite Pipe",
+  "icon": "bobbypipes:satellite_pipe",
+  "category": "bobbypipes:crafting",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Satellite Pipe works in BobbyPipes."
+    }
+  ]
+}

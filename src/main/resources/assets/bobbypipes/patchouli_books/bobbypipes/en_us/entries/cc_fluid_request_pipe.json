@@ -1,0 +1,32 @@
+{
+  "name": "CC: Fluid Request Pipe",
+  "icon": "bobbypipes:fluid_request_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 3,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Pull fluids from fluid providers into tanks touching this pipe.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:fluid_request_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getAvailable",
+      "text": "$(method)getAvailable()$()$(br2)Free fluids visible from this request pipe.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() — fluid id$(li)$(field)count$() $(type)number$() — millibuckets$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)getAvailable()$()$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getFluidCount",
+      "text": "$(method)getFluidCount$()($(param)fluidId$())$(br2)Free millibuckets of one fluid.$(br2)$(note)Returns$()$(br)$(li)$(type)number$() — mB, or $(code)0$()$(br2)$(note)Example$()$(br)$(code)p.$(method)getFluidCount$()($(str)\"minecraft:water\"$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "request",
+      "text": "$(method)request$()($(param)fluidId$(), $(param)amountMb$())$(br2)Queues fluid toward this pipe.$(br2)$(note)Returns$()$(br)$(li)$(field)shipped$() $(type)number$()$(li)$(field)requested$() $(type)number$()$(li)$(field)complete$() $(type)boolean$()$(br2)$(note)Example$()$(br)$(code)p.$(method)request$()($(str)\"minecraft:lava\"$(), $(code)1000$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "canRequest",
+      "text": "$(method)canRequest$()($(param)fluidId$(), $(param)amountMb$())$(br2)Checks free stock only — does not commit.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() — mB shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(str)\"minecraft:water\"$(), $(code)8000$())$()"
+    }
+  ]
+}

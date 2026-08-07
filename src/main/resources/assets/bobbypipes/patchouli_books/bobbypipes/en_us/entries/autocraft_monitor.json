@@ -1,0 +1,12 @@
+{
+  "name": "Autocraft Monitor",
+  "icon": "bobbypipes:autocraft_monitor",
+  "category": "bobbypipes:crafting",
+  "sortnum": 4,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Autocraft Monitor works in BobbyPipes."
+    }
+  ]
+}

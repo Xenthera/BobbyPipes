@@ -52,7 +52,15 @@ public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity)
             RequestService.Outcome outcome = RequestService.requestWhatYouCan(
                     player.level(), payload.pos(), payload.item(), payload.quantity());
             int shipped = outcome.commitment() == null ? 0 : outcome.commitment().shipped();
-            RequestChat.item(player, payload.item(), payload.quantity(), shipped);
+            String failKey = outcome.commitment() == null ? "chat.bobbypipes.request.fail.no_pipe"
+                    : outcome.commitment().failKey();
+            String failDetail = outcome.commitment() == null ? ""
+                    : outcome.commitment().failDetail();
+            if (shipped <= 0 && (failKey == null || failKey.isEmpty())
+                    && outcome.hasPipe() && !outcome.plan().missing().isEmpty()) {
+                failKey = "chat.bobbypipes.request.fail.missing";
+            }
+            RequestChat.item(player, payload.item(), payload.quantity(), shipped, failKey, failDetail);
             context.reply(RequestResultPayload.from(outcome));
             if (outcome.hasPipe()) {
                 RequestMenus.syncStock(player, payload.pos());

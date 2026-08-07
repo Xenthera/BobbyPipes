@@ -1,0 +1,12 @@
+{
+  "name": "Chunk Loader",
+  "icon": "bobbypipes:chunk_loader",
+  "category": "bobbypipes:tools",
+  "sortnum": 3,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Chunk Loader works in BobbyPipes."
+    }
+  ]
+}

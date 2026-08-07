@@ -66,6 +66,9 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
     /** Non-null while the shortfall modal is up, which blocks the rest of the screen. */
     private List<RequestResultPayload.Shortfall> shortfallModal;
+    /** Non-empty while a route/commit failure modal is up (no item shortfall list). */
+    private String failReasonKey = "";
+    private String failReasonDetail = "";
     private UiButton modalClose;
     /** Stops the modal reopening every tick while the same result is on screen. */
     private boolean shortfallShown;
@@ -206,6 +209,20 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
             return;
         }
         shortfallModal = shortfalls;
+        addModalCloseButton();
+    }
+
+    private void openFailReasonModal(String reasonKey, String reasonDetail) {
+        closeShortfallModal();
+        if (reasonKey == null || reasonKey.isEmpty()) {
+            return;
+        }
+        failReasonKey = reasonKey;
+        failReasonDetail = reasonDetail == null ? "" : reasonDetail;
+        addModalCloseButton();
+    }
+
+    private void addModalCloseButton() {
         modalClose = UiButton.builder(
                         Component.translatable("gui.bobbypipes.request.close"),
                         button -> closeShortfallModal())
@@ -221,9 +238,18 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
             modalClose = null;
         }
         shortfallModal = null;
+        failReasonKey = "";
+        failReasonDetail = "";
+    }
+
+    private boolean isFailModalOpen() {
+        return shortfallModal != null || !failReasonKey.isEmpty();
     }
 
     private int modalHeight() {
+        if (!failReasonKey.isEmpty()) {
+            return failReasonDetail.isEmpty() ? 62 : 78;
+        }
         return 34 + Math.min(shortfallModal == null ? 0 : shortfallModal.size(), 6) * 20 + 8;
     }
 
@@ -237,10 +263,13 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         // Only pop the shortfall card when nothing shipped. A partial dispatch already
         // shows on the status line; opening the modal would interrupt spam-clicking
         // Request for another batch of whatever is left.
-        if (latest != null && shortfallModal == null && latest.shipped() <= 0
-                && !latest.shortfalls().isEmpty() && !shortfallShown) {
+        if (latest != null && !isFailModalOpen() && latest.shipped() <= 0 && !shortfallShown) {
             shortfallShown = true;
-            openShortfallModal(latest.shortfalls());
+            if (!latest.shortfalls().isEmpty()) {
+                openShortfallModal(latest.shortfalls());
+            } else if (latest.hasFailReason()) {
+                openFailReasonModal(latest.reasonKey(), latest.reasonDetail());
+            }
         }
         if (latest == null) {
             shortfallShown = false;
@@ -292,14 +321,13 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
     }
 
     /**
-     * Draws the shortfall list over a dimmed screen.
+     * Draws the shortfall list or a concrete fail reason over a dimmed screen.
      *
      * <p>A total on its own only says the request failed. This says which items and how
-     * many, so the fix is obvious without opening anything else.
+     * many (or why the route/commit failed), so the fix is obvious without opening anything else.
      */
     private void renderShortfallModal(GuiGraphicsExtractor graphics) {
-        List<RequestResultPayload.Shortfall> shortfalls = shortfallModal;
-        if (shortfalls == null) {
+        if (!isFailModalOpen()) {
             return;
         }
         int height = modalHeight();
@@ -308,6 +336,21 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
         graphics.fill(0, 0, width, this.height, 0xA0_10_10_14);
         Panel.draw(graphics, PipeThemes.REQUEST, x, y, imageWidth, height);
+
+        if (!failReasonKey.isEmpty()) {
+            graphics.text(font, Component.translatable(failReasonKey),
+                    x + 8, y + 8, 0xFF_FF_8A_7A, false);
+            if (!failReasonDetail.isEmpty()) {
+                graphics.text(font, failReasonDetail,
+                        x + 8, y + 24, 0xFF_E6_E6_EE, false);
+            }
+            return;
+        }
+
+        List<RequestResultPayload.Shortfall> shortfalls = shortfallModal;
+        if (shortfalls == null) {
+            return;
+        }
 
         graphics.text(font, Component.translatable("gui.bobbypipes.request.missing.title"),
                 x + 8, y + 8, 0xFF_FF_8A_7A, false);
@@ -466,7 +509,7 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (shortfallModal != null) {
+        if (isFailModalOpen()) {
             // Request stays clickable so each press can dispatch another batch; only the
             // rest of the panel is locked to the shortfall card / its close button.
             if (requestButton != null && requestButton.isMouseOver(event.x(), event.y())) {

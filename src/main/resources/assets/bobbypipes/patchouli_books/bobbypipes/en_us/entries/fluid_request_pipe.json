@@ -1,0 +1,12 @@
+{
+  "name": "Fluid Request Pipe",
+  "icon": "bobbypipes:fluid_request_pipe",
+  "category": "bobbypipes:fluid",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Fluid Request Pipe works in BobbyPipes."
+    }
+  ]
+}

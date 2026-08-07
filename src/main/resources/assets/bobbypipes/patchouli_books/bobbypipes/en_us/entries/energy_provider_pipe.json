@@ -1,0 +1,12 @@
+{
+  "name": "Energy Provider Pipe",
+  "icon": "bobbypipes:energy_provider_pipe",
+  "category": "bobbypipes:energy",
+  "sortnum": 1,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Energy Provider Pipe works in BobbyPipes."
+    }
+  ]
+}

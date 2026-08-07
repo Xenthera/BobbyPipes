@@ -1,0 +1,12 @@
+{
+  "name": "Fluid Provider Pipe",
+  "icon": "bobbypipes:fluid_provider_pipe",
+  "category": "bobbypipes:fluid",
+  "sortnum": 1,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Fluid Provider Pipe works in BobbyPipes."
+    }
+  ]
+}

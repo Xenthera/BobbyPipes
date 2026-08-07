@@ -18,6 +18,11 @@ public final class RequestChat {
     }
 
     public static void item(ServerPlayer player, ItemResource item, int requested, int shipped) {
+        item(player, item, requested, shipped, "", "");
+    }
+
+    public static void item(ServerPlayer player, ItemResource item, int requested, int shipped,
+                            String failKey, String failDetail) {
         if (item.isEmpty() || requested <= 0) {
             return;
         }
@@ -26,7 +31,7 @@ public final class RequestChat {
                 item.toStack(1).getHoverName(),
                 requested);
         line.append(Component.literal(" - "));
-        line.append(result(shipped, requested));
+        line.append(result(shipped, requested, failKey, failDetail));
         player.sendSystemMessage(line);
     }
 
@@ -39,7 +44,7 @@ public final class RequestChat {
                 requestedMb,
                 fluid.getFluidType().getDescription());
         line.append(Component.literal(" - "));
-        line.append(result(shippedMb, requestedMb));
+        line.append(result(shippedMb, requestedMb, "", ""));
         player.sendSystemMessage(line);
     }
 
@@ -49,11 +54,11 @@ public final class RequestChat {
         }
         MutableComponent line = Component.translatable("chat.bobbypipes.request.energy", requestedFe);
         line.append(Component.literal(" - "));
-        line.append(result(shippedFe, requestedFe));
+        line.append(result(shippedFe, requestedFe, "", ""));
         player.sendSystemMessage(line);
     }
 
-    private static Component result(int shipped, int requested) {
+    private static Component result(int shipped, int requested, String failKey, String failDetail) {
         if (shipped >= requested) {
             return Component.translatable("chat.bobbypipes.request.ok")
                     .withStyle(ChatFormatting.GREEN);
@@ -62,7 +67,14 @@ public final class RequestChat {
             return Component.translatable("chat.bobbypipes.request.partial", shipped, requested)
                     .withStyle(ChatFormatting.YELLOW);
         }
-        return Component.translatable("chat.bobbypipes.request.fail")
-                .withStyle(ChatFormatting.RED);
+        String key = failKey == null || failKey.isEmpty()
+                ? "chat.bobbypipes.request.fail"
+                : failKey;
+        MutableComponent fail = Component.translatable(key).withStyle(ChatFormatting.RED);
+        if (failDetail != null && !failDetail.isEmpty()) {
+            fail.append(Component.literal(" (" + failDetail + ")")
+                    .withStyle(ChatFormatting.GRAY));
+        }
+        return fail;
     }
 }

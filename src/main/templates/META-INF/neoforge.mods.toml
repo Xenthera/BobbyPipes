@@ -56,6 +56,20 @@ Items move when you ask for them, not before. Built natively for NeoForge.
     side="BOTH"
 
 [[dependencies.${mod_id}]]
+    modId="computercraft"
+    type="optional"
+    versionRange="[1.118,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="patchouli"
+    type="optional"
+    versionRange="[1.20,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
     modId="bobbycore"
     type="required"
     versionRange="[0.1.0,)"

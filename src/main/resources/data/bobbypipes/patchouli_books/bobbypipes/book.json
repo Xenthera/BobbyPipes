@@ -1,0 +1,18 @@
+{
+  "name": "BobbyPipes Guide",
+  "landing_text": "Request-driven pipes for NeoForge.$(br2)Browse each pipe and tool below. Entries marked with ComputerCraft document the Lua peripheral API when CC:Tweaked is installed.",
+  "version": 1,
+  "creative_tab": "bobbypipes:main",
+  "getCreatorModId": "bobbypipes",
+  "use_resource_pack": "true",
+  "macros": {
+    "$(method)": "$(l)$(#066)",
+    "$(param)": "$(#05a)",
+    "$(field)": "$(#840)",
+    "$(str)": "$(#a40)",
+    "$(kw)": "$(#609)",
+    "$(type)": "$(#444)$(o)",
+    "$(note)": "$(#666)$(o)",
+    "$(code)": "$(#222)"
+  }
+}

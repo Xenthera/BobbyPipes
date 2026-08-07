@@ -1,0 +1,12 @@
+{
+  "name": "Pattern Table",
+  "icon": "bobbypipes:pattern_table",
+  "category": "bobbypipes:crafting",
+  "sortnum": 3,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Pattern Table works in BobbyPipes."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "CC: Energy Request Pipe",
+  "icon": "bobbypipes:energy_request_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Pull Forge Energy from energy providers into storages touching this pipe.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:energy_request_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getAvailable",
+      "text": "$(method)getAvailable()$()$(br2)Approximate FE the network can currently supply toward this pipe (queued withdrawals already subtracted).$(br2)$(note)Returns$()$(br)$(li)$(type)number$() — FE available$(br2)$(note)Example$()$(br)$(code)$(kw)local$() fe = p.$(method)getAvailable()$()$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "request",
+      "text": "$(method)request$()($(param)amountFe$())$(br2)Queues as much FE as capacity and supply allow.$(br2)$(note)Returns$()$(br)$(li)$(field)shipped$() $(type)number$()$(li)$(field)requested$() $(type)number$()$(li)$(field)complete$() $(type)boolean$()$(br2)$(note)Example$()$(br)$(code)p.$(method)request$()($(code)100000$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "canRequest",
+      "text": "$(method)canRequest$()($(param)amountFe$())$(br2)Compares the ask to current network supply.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() — FE shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(code)50000$())$()"
+    }
+  ]
+}

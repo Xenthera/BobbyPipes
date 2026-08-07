@@ -1,0 +1,12 @@
+{
+  "name": "Basic Pipe",
+  "icon": "bobbypipes:basic_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Basic Pipe works in BobbyPipes."
+    }
+  ]
+}

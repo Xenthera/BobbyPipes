@@ -1,9 +1,9 @@
 package com.bobby.bobbypipes.registry;
 
 import com.bobby.bobbypipes.BobbyPipes;
-import com.bobby.bobbypipes.block.entity.BasicPipeBlockEntity;
-import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
+import com.bobby.bobbypipes.compat.computercraft.ComputerCraftCompat;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
@@ -41,5 +41,11 @@ public final class ModCapabilities {
                                         serverLevel, pos, side)
                                 : null,
                 ModBlocks.PIPE.get());
+
+        // Soft-optional CC:Tweaked peripherals — keep CC types out of the classload path
+        // when the mod is absent.
+        if (ModList.get().isLoaded("computercraft")) {
+            ComputerCraftCompat.register(event);
+        }
     }
 }

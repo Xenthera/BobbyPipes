@@ -1,0 +1,12 @@
+{
+  "name": "Request Pipe",
+  "icon": "bobbypipes:request_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 5,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Request Pipe works in BobbyPipes."
+    }
+  ]
+}

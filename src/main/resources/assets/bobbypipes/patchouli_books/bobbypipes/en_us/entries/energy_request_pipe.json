@@ -1,0 +1,12 @@
+{
+  "name": "Energy Request Pipe",
+  "icon": "bobbypipes:energy_request_pipe",
+  "category": "bobbypipes:energy",
+  "sortnum": 2,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Energy Request Pipe works in BobbyPipes."
+    }
+  ]
+}

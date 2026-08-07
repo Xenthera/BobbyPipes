@@ -1,0 +1,12 @@
+{
+  "name": "Pipe Wrench",
+  "icon": "bobbypipes:wrench",
+  "category": "bobbypipes:tools",
+  "sortnum": 1,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Pipe Wrench works in BobbyPipes."
+    }
+  ]
+}

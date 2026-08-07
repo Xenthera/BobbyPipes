@@ -1,0 +1,12 @@
+{
+  "name": "Passive Supplier Pipe",
+  "icon": "bobbypipes:passive_supplier_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 7,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Passive Supplier Pipe works in BobbyPipes."
+    }
+  ]
+}

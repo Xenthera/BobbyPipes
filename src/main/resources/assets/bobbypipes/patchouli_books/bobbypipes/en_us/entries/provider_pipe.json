@@ -1,0 +1,12 @@
+{
+  "name": "Provider Pipe",
+  "icon": "bobbypipes:provider_pipe",
+  "category": "bobbypipes:pipes",
+  "sortnum": 4,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Documentation placeholder.$(br2)This entry will describe how Provider Pipe works in BobbyPipes."
+    }
+  ]
+}

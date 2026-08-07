@@ -194,14 +194,19 @@ public final class CrossDimPipeGraph {
 
     /**
      * Next hop from {@code from} toward {@code to} across any live cross-dim bridge.
-     * Empty when no bridge knows both ends.
+     * Empty when no bridge can actually reach both ends.
+     *
+     * <p>A bridge topology may {@code contain} isolated smart nodes that share no path —
+     * catalog uses {@code canReach}, so commit must too. Trying the first bridge that
+     * merely contains both endpoints used to return empty and skip later bridges that
+     * did have a route.
      */
     public static java.util.Optional<PipeNodeId> nextHop(PipeNodeId from, PipeNodeId to) {
         if (from.sameDimension(to)) {
             return java.util.Optional.empty();
         }
         for (RoutingSnapshot<PipeNodeId> bridge : BRIDGES.values()) {
-            if (bridge.contains(from) && bridge.contains(to)) {
+            if (bridge.canReach(from, to)) {
                 return bridge.nextHop(from, to);
             }
         }

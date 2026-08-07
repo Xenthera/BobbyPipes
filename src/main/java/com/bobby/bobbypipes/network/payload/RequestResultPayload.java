@@ -10,9 +10,13 @@ import net.minecraft.resources.Identifier;
 
 /**
  * Server -> client: status line after a request attempt from the GUI.
+ *
+ * @param reasonKey    translation key explaining a failure, or empty on success / partial
+ * @param reasonDetail optional detail (e.g. source → dest), or empty
  */
 public record RequestResultPayload(int shipped, int requested, int missing, boolean hasPipe,
-                                   java.util.List<Shortfall> shortfalls)
+                                   java.util.List<Shortfall> shortfalls,
+                                   String reasonKey, String reasonDetail)
         implements CustomPacketPayload {
 
     public static final Type<RequestResultPayload> TYPE =
@@ -25,6 +29,8 @@ public record RequestResultPayload(int shipped, int requested, int missing, bool
                     ByteBufCodecs.VAR_INT, RequestResultPayload::missing,
                     ByteBufCodecs.BOOL, RequestResultPayload::hasPipe,
                     Shortfall.STREAM_CODEC.apply(ByteBufCodecs.list()), RequestResultPayload::shortfalls,
+                    ByteBufCodecs.STRING_UTF8, RequestResultPayload::reasonKey,
+                    ByteBufCodecs.STRING_UTF8, RequestResultPayload::reasonDetail,
                     RequestResultPayload::new);
 
     /**
@@ -45,7 +51,8 @@ public record RequestResultPayload(int shipped, int requested, int missing, bool
 
     public static RequestResultPayload from(RequestService.Outcome outcome) {
         if (!outcome.hasPipe()) {
-            return new RequestResultPayload(0, 0, 0, false, java.util.List.of());
+            return new RequestResultPayload(0, 0, 0, false, java.util.List.of(),
+                    "chat.bobbypipes.request.fail.no_pipe", "");
         }
         int shipped = outcome.commitment() == null ? 0 : outcome.commitment().shipped();
         int requested = outcome.commitment() == null
@@ -59,7 +66,27 @@ public record RequestResultPayload(int shipped, int requested, int missing, bool
                 .filter(demand -> demand.amount() > 0)
                 .map(demand -> new Shortfall(demand.item().toStack(1), demand.amount()))
                 .toList();
-        return new RequestResultPayload(shipped, requested, missing, true, shortfalls);
+
+        String reasonKey = "";
+        String reasonDetail = "";
+        if (shipped <= 0) {
+            if (outcome.commitment() != null && outcome.commitment().hasFailReason()) {
+                reasonKey = outcome.commitment().failKey();
+                reasonDetail = outcome.commitment().failDetail();
+            } else if (!shortfalls.isEmpty()) {
+                reasonKey = "chat.bobbypipes.request.fail.missing";
+            } else if (outcome.plan().isEmpty()) {
+                reasonKey = "chat.bobbypipes.request.fail.no_stock";
+            } else {
+                reasonKey = "chat.bobbypipes.request.fail";
+            }
+        }
+        return new RequestResultPayload(
+                shipped, requested, missing, true, shortfalls, reasonKey, reasonDetail);
+    }
+
+    public boolean hasFailReason() {
+        return reasonKey != null && !reasonKey.isEmpty();
     }
 
     @Override

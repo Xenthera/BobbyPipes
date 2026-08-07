@@ -1,0 +1,6 @@
+{
+  "name": "Energy Pipes",
+  "description": "Move Forge Energy across the network.",
+  "icon": "bobbypipes:energy_provider_pipe",
+  "sortnum": 2
+}

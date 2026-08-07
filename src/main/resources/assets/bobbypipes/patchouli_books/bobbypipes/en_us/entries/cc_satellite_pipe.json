@@ -1,0 +1,22 @@
+{
+  "name": "CC: Satellite Pipe",
+  "icon": "bobbypipes:satellite_pipe",
+  "category": "bobbypipes:computercraft",
+  "sortnum": 7,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "Name the satellite buffer used by crafting-pipe satellite slots.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:satellite_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+    },
+    {
+      "type": "patchouli:text",
+      "title": "getName",
+      "text": "$(method)getName()$()$(br2)Current satellite name (may be empty).$(br2)$(note)Returns$()$(br)$(li)$(type)string$()$(br2)$(note)Example$()$(br)$(code)$(kw)print$()(p.$(method)getName()$())$()"
+    },
+    {
+      "type": "patchouli:text",
+      "title": "setName",
+      "text": "$(method)setName$()($(param)name$())$(br2)Sets a non-blank name. Throws if blank, or if another satellite on this network already uses that name.$(br2)$(note)Returns$()$(br)$(li)$(type)boolean$() — $(kw)true$() on success$(br2)$(note)Example$()$(br)$(code)p.$(method)setName$()($(str)\"furnace_in\"$())$()"
+    }
+  ]
+}

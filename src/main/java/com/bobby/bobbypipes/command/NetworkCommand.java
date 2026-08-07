@@ -171,6 +171,10 @@ public final class NetworkCommand {
         RequestService.Commitment commitment = outcome.commitment();
         reply(context, "  shipped " + commitment.shipped() + " of " + commitment.requested()
                 + (commitment.isComplete() ? "" : ", short by " + commitment.shortfall()));
+        if (commitment.hasFailReason()) {
+            reply(context, "  reason: " + commitment.failKey()
+                    + (commitment.failDetail().isEmpty() ? "" : " (" + commitment.failDetail() + ")"));
+        }
         return commitment.shipped();
     }
 
