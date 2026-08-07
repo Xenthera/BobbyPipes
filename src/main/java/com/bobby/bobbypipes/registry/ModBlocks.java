@@ -15,6 +15,7 @@ import com.bobby.bobbypipes.block.FluidSupplierPipeBlock;
 import com.bobby.bobbypipes.block.PassiveSupplierPipeBlock;
 import com.bobby.bobbypipes.block.PatternTableBlock;
 import com.bobby.bobbypipes.block.PipeBlock;
+import com.bobby.bobbypipes.block.PowerJunctionBlock;
 import com.bobby.bobbypipes.block.ProviderPipeBlock;
 import com.bobby.bobbypipes.block.RequestPipeBlock;
 import com.bobby.bobbypipes.block.SatellitePipeBlock;
@@ -159,6 +160,12 @@ public final class ModBlocks {
     /** Creative-only chunk force-loader. No recipe. */
     public static final DeferredBlock<ChunkLoaderBlock> CHUNK_LOADER =
             registerWithItem("chunk_loader", props -> new ChunkLoaderBlock(props
+                    .strength(2.5f)
+                    .sound(SoundType.METAL)));
+
+    /** Logistics FE buffer that powers routing actions on the adjacent pipe component. */
+    public static final DeferredBlock<PowerJunctionBlock> POWER_JUNCTION =
+            registerWithItem("power_junction", props -> new PowerJunctionBlock(props
                     .strength(2.5f)
                     .sound(SoundType.METAL)));
 

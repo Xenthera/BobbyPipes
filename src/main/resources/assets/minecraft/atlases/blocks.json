@@ -450,6 +450,226 @@
           "base": "bobbypipes:pipe_base/pipe_arm_base",
           "tint": 5911966,
           "overlays": []
+        },
+        {
+          "output": "bobbypipes:block/basic_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2314664,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/basic_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2314664,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/crafting_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 7940500,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/crafting_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 7940500,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_provider_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_provider_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_request_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_request_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_supplier_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/energy_supplier_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_energy",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_provider_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_provider_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_request_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_request_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_supplier_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/fluid_supplier_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_edge_fluid",
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/passive_supplier_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2718356,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/passive_supplier_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2718356,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/provider_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/provider_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 12674354,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/request_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/request_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 2724973,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/satellite_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 9709919,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/satellite_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 9709919,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/supplier_pipe_powered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_powered"
+          ]
+        },
+        {
+          "output": "bobbypipes:block/supplier_pipe_unpowered",
+          "base": "bobbypipes:pipe_base/pipe_body_base",
+          "tint": 3877268,
+          "overlays": [
+            "bobbypipes:pipe_base/pipe_indicator_unpowered"
+          ]
         }
       ]
     }

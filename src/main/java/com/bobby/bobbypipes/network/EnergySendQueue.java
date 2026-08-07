@@ -172,10 +172,19 @@ public final class EnergySendQueue {
             }
 
             Direction from = EnergyAccess.sideHolding(level, job.source, job.excluded).orElse(null);
+            if (!network.power().canAfford(job.source,
+                    com.bobby.bobbypipes.network.power.LogisticsPowerCosts.ENERGY_PROVIDER)) {
+                continue;
+            }
             int taken = EnergyAccess.extract(level, job.source, want, job.excluded);
             if (taken <= 0) {
                 // Storage emptied or pipe broken - drop the rest of this job.
                 iterator.remove();
+                continue;
+            }
+            if (!network.power().trySpend(job.source,
+                    com.bobby.bobbypipes.network.power.PowerSpendKind.ENERGY_PROVIDER)) {
+                EnergyAccess.insert(level, job.source, taken, job.excluded);
                 continue;
             }
 

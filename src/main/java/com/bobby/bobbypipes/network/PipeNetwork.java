@@ -7,6 +7,7 @@ import com.bobby.bobbypipes.block.RoutedPipeBlock;
 import com.bobby.bobbypipes.menu.AutocraftMonitorMenus;
 import com.bobby.bobbypipes.network.payload.CraftStatusPayload;
 import com.bobby.bobbypipes.network.payload.ParcelSyncPayload;
+import com.bobby.bobbypipes.network.power.ComponentPower;
 import com.bobby.bobbypipes.registry.ModItems;
 import com.bobby.bobbypipes.request.DeliveryLedger;
 import com.bobby.bobbypipes.transit.EnergyShipment;
@@ -99,6 +100,7 @@ public final class PipeNetwork {
     private final ExtractPulseBudget<BlockPos> fluidExtractBudget = FluidSendQueue.defaultBudget();
     private final FluidSendQueue fluidSendQueue = new FluidSendQueue(fluidExtractBudget);
     private final CraftJobManager craftJobs = new CraftJobManager();
+    private final ComponentPower power;
 
     /** Last scanned pipe lattice; used to paint routed-exit marks after a rebuild. */
     private Topology<BlockPos> lastLattice = Topology.empty();
@@ -130,10 +132,40 @@ public final class PipeNetwork {
 
     private PipeNetwork(ServerLevel level) {
         this.level = level;
+        this.power = new ComponentPower(level, this);
         this.drift = new DriftTracker(level);
         this.parcels = new ParcelTracker<>(TICKS_PER_HOP, this::itemHopTicks);
         this.energyParcels = new ParcelTracker<>(TICKS_PER_HOP, this::energyHopTicks);
         this.fluidParcels = new ParcelTracker<>(TICKS_PER_HOP, this::fluidHopTicks);
+        this.parcels.setHopBeginGate(this::allowParcelHop);
+        this.energyParcels.setHopBeginGate(this::allowParcelHop);
+        this.fluidParcels.setHopBeginGate(this::allowParcelHop);
+    }
+
+    public ComponentPower power() {
+        return power;
+    }
+
+    public Set<BlockPos> smartPipes() {
+        return lastSmart;
+    }
+
+    /**
+     * Same-dimension link hops pay distance FE here; ordinary lattice hops are free.
+     * Cross-dim handoffs are charged in {@link #promoteStagingDeliveries}.
+     */
+    private <P> boolean allowParcelHop(Parcel<BlockPos, P> parcel) {
+        BlockPos at = parcel.atNode();
+        BlockPos next = parcel.nextHop();
+        if (next == null) {
+            return true;
+        }
+        PipeNodeId atId = PipeNodeId.of(level, at);
+        Optional<PipeNodeId> peer = LinkPipeRegistry.get(level).peerOf(atId);
+        if (peer.isEmpty() || !peer.get().pos().equals(next) || !peer.get().sameDimension(atId)) {
+            return true;
+        }
+        return power.trySpendLinkSame(at, next, parcel.id());
     }
 
     /**
@@ -409,6 +441,7 @@ public final class PipeNetwork {
         if (rebuilt) {
             applyArmMarks();
         }
+        power.tick();
 
         craftJobs.tick(level, this);
         sendQueue.tick(level, this, ledger, parcels, cache.current());
@@ -865,6 +898,11 @@ public final class PipeNetwork {
                 kept.add(delivery);
                 continue;
             }
+            // Pay interdim link toll before leaving this level; stall (re-queue) if brownout.
+            if (!power.trySpendLinkInterdim(delivery.destination(), trip.peer(), delivery.id())) {
+                requeueStaging(tracker, trips, delivery, trip);
+                continue;
+            }
             trips.remove(delivery.id());
             if (trip.wormhole()) {
                 // Should have been consumed by handoffCompletingWormholes; never insert
@@ -878,6 +916,26 @@ public final class PipeNetwork {
             return report;
         }
         return new ParcelTracker.TickReport<>(List.copyOf(kept), report.stranded());
+    }
+
+    /**
+     * Puts a brownout-stalled staging delivery back on the local link mouth so the next
+     * tick can retry the interdim toll without voiding the parcel.
+     */
+    private <P> void requeueStaging(ParcelTracker<BlockPos, P> tracker,
+                                    Map<Long, CrossDimTrip> trips,
+                                    ParcelTracker.Delivery<BlockPos, P> delivery,
+                                    CrossDimTrip trip) {
+        power.clearLinkToll(delivery.id());
+        trips.remove(delivery.id());
+        Optional<Long> id = tracker.injectContinuing(
+                delivery.payload(),
+                delivery.destination(),
+                delivery.destination(),
+                null,
+                TICKS_PER_HOP,
+                cache.current().revision());
+        id.ifPresent(parcelId -> trips.put(parcelId, trip));
     }
 
     private <P> void handoffStaging(ParcelTracker<BlockPos, P> tracker, P payload, CrossDimTrip trip) {
@@ -1069,6 +1127,7 @@ public final class PipeNetwork {
         lastLattice = lattice;
         lastSmart = Set.copyOf(smartNodes(lattice));
         CrossDimPipeGraph.refreshAfterRebuild(level, lattice, lastSmart);
+        power.rediscover(lattice);
         return DirectCorridors.transitTopology(lattice, lastSmart);
     }
 

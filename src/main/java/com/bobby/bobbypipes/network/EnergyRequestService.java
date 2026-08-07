@@ -54,7 +54,16 @@ public final class EnergyRequestService {
      *         receive that much
      */
     public static int request(ServerLevel level, PipeNetwork network, BlockPos dest, int amountFe) {
+        return request(level, network, dest, amountFe, true);
+    }
+
+    public static int request(ServerLevel level, PipeNetwork network, BlockPos dest, int amountFe,
+                              boolean spendRequestPower) {
         if (amountFe <= 0) {
+            return 0;
+        }
+        if (spendRequestPower && !network.power().trySpend(dest,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.ENERGY_REQUEST)) {
             return 0;
         }
         int alreadyInbound = network.energySendQueue().queuedTo(dest)

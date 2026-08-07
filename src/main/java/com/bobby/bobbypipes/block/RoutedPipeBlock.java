@@ -7,9 +7,13 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A pipe that participates in routing decisions.
@@ -26,11 +30,28 @@ import net.minecraft.world.phys.BlockHitResult;
  *
  * <p>When a click opens a pipe screen, it consumes the interaction so the held item does
  * not also place (buckets, blocks, ...). Sneak to use the held item on/against the pipe.
+ *
+ * <p>{@link #POWERED} drives the centre-body green/red logistics-power overlay.
  */
 public class RoutedPipeBlock extends PipeBlock {
 
+    public static final BooleanProperty POWERED = BooleanProperty.create("powered");
+
     public RoutedPipeBlock(Properties properties) {
         super(properties);
+        registerDefaultState(defaultBlockState().setValue(POWERED, true));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
+        super.createBlockStateDefinition(builder);
+        builder.add(POWERED);
+    }
+
+    @Override
+    public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
+        BlockState state = super.getStateForPlacement(context);
+        return state == null ? null : state.setValue(POWERED, true);
     }
 
     /**

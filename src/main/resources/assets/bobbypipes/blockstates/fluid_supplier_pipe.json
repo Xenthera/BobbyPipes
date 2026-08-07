@@ -161,54 +161,119 @@
     },
     {
       "when": {
-        "north": "none"
+        "north": "none",
+        "powered": "true"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap"
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered"
       }
     },
     {
       "when": {
-        "east": "none"
+        "north": "none",
+        "powered": "false"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap",
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered"
+      }
+    },
+    {
+      "when": {
+        "east": "none",
+        "powered": "true"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered",
         "y": 90
       }
     },
     {
       "when": {
-        "south": "none"
+        "east": "none",
+        "powered": "false"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap",
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "south": "none",
+        "powered": "true"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered",
         "y": 180
       }
     },
     {
       "when": {
-        "west": "none"
+        "south": "none",
+        "powered": "false"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap",
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "west": "none",
+        "powered": "true"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered",
         "y": 270
       }
     },
     {
       "when": {
-        "up": "none"
+        "west": "none",
+        "powered": "false"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap",
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "up": "none",
+        "powered": "true"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered",
         "x": 270
       }
     },
     {
       "when": {
-        "down": "none"
+        "up": "none",
+        "powered": "false"
       },
       "apply": {
-        "model": "bobbypipes:block/fluid_supplier_pipe_cap",
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "down": "none",
+        "powered": "true"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_powered",
+        "x": 90
+      }
+    },
+    {
+      "when": {
+        "down": "none",
+        "powered": "false"
+      },
+      "apply": {
+        "model": "bobbypipes:block/fluid_supplier_pipe_cap_unpowered",
         "x": 90
       }
     }

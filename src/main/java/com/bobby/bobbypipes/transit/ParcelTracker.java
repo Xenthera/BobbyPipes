@@ -63,8 +63,18 @@ public final class ParcelTracker<N, P> {
         int ticks(N at, N next, N origin, N destination, P payload);
     }
 
+    /**
+     * Optional gate invoked when a parcel is about to start progressing on its current hop
+     * ({@code ticksIntoHop == 0}). Returning false holds the parcel in place this tick.
+     */
+    @FunctionalInterface
+    public interface HopBeginGate<N, P> {
+        boolean allowBegin(Parcel<N, P> parcel);
+    }
+
     private final int ticksPerHop;
     private final HopLength<N, P> hopLength;
+    private HopBeginGate<N, P> hopBeginGate = parcel -> true;
     private final Map<Long, Parcel<N, P>> parcels = new LinkedHashMap<>();
     private long nextId = 1L;
 
@@ -88,6 +98,10 @@ public final class ParcelTracker<N, P> {
         }
         this.ticksPerHop = ticksPerHop;
         this.hopLength = hopLength;
+    }
+
+    public void setHopBeginGate(HopBeginGate<N, P> gate) {
+        this.hopBeginGate = gate != null ? gate : parcel -> true;
     }
 
     private int hopTicks(N at, N next, N origin, N destination, P payload) {
@@ -207,6 +221,13 @@ public final class ParcelTracker<N, P> {
                 stranded.add(new Stranded<>(current.id(), current.payload(),
                         current.atNode(), current.destination()));
                 finished.add(current.id());
+                continue;
+            }
+
+            if (current.ticksIntoHop() == 0
+                    && current.nextHop() != null
+                    && !hopBeginGate.allowBegin(current)) {
+                updated.add(current);
                 continue;
             }
 

@@ -38,6 +38,8 @@ final class PipeThemes {
     static final UiTheme AUTOCRAFT_MONITOR = BobbyThemes.tinted(0x2F9A92);
     /** Chunk loader - cyan (force-load debug). */
     static final UiTheme CHUNK_LOADER = BobbyThemes.tinted(0x2A8CA8);
+    /** Power junction - amber. */
+    static final UiTheme POWER_JUNCTION = BobbyThemes.tinted(0xC4A035);
 
     private PipeThemes() {
     }

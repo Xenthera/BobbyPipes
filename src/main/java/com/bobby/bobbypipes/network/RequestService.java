@@ -141,7 +141,13 @@ public final class RequestService {
                                        ItemResource item,
                                        int count,
                                        java.util.Set<Object> excludedStores) {
-        Commitment commitment = requestWhatYouCan(level, at, item, count, excludedStores).commitment();
+        PipeNetwork network = PipeNetwork.get(level);
+        if (!network.power().trySpend(at,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.SUPPLIER)) {
+            return 0;
+        }
+        Commitment commitment = requestWhatYouCan(level, at, item, count, excludedStores, false)
+                .commitment();
         return commitment == null ? 0 : commitment.shipped();
     }
 
@@ -170,6 +176,15 @@ public final class RequestService {
                                             ItemResource item,
                                             int count,
                                             java.util.Set<Object> excludedStores) {
+        return requestWhatYouCan(level, at, item, count, excludedStores, true);
+    }
+
+    public static Outcome requestWhatYouCan(ServerLevel level,
+                                            BlockPos at,
+                                            ItemResource item,
+                                            int count,
+                                            java.util.Set<Object> excludedStores,
+                                            boolean spendRequestPower) {
         if (item.isEmpty() || count <= 0) {
             return Outcome.noPipe();
         }
@@ -187,7 +202,8 @@ public final class RequestService {
         if (plan.isComplete()) {
             // Commit this plan directly so a second re-plan cannot collapse a multi-crafter
             // split into a different shape.
-            return new Outcome(plan, commit(level, network, plan, at, item, count, excludedStores));
+            return new Outcome(plan, commit(level, network, plan, at, item, count,
+                    excludedStores, spendRequestPower));
         }
         int want = satisfiableAmount(plan, item);
         if (want <= 0) {
@@ -200,7 +216,8 @@ public final class RequestService {
             return new Outcome(plan, new Commitment(0, count,
                     "chat.bobbypipes.request.fail.missing", ""));
         }
-        Commitment commitment = commit(level, network, partial, at, item, want, excludedStores);
+        Commitment commitment = commit(level, network, partial, at, item, want,
+                excludedStores, spendRequestPower);
         // Preserve commit-time route failures while reporting shipped against the original ask.
         return new Outcome(plan, new Commitment(
                 commitment.shipped(), count, commitment.failKey(), commitment.failDetail()));
@@ -245,7 +262,7 @@ public final class RequestService {
                                     ItemResource requestedItem,
                                     int requestedAmount) {
         return commit(level, network, plan, requester, requestedItem, requestedAmount,
-                java.util.Set.of());
+                java.util.Set.of(), true);
     }
 
     /**
@@ -263,6 +280,21 @@ public final class RequestService {
                                     ItemResource requestedItem,
                                     int requestedAmount,
                                     java.util.Set<Object> excludedStores) {
+        return commit(level, network, plan, requester, requestedItem, requestedAmount,
+                excludedStores, true);
+    }
+
+    /**
+     * @param spendRequestPower when false, the caller already paid (e.g. supplier restock)
+     */
+    public static Commitment commit(ServerLevel level,
+                                    PipeNetwork network,
+                                    RequestPlan<PipeNodeId, ItemResource> plan,
+                                    BlockPos requester,
+                                    ItemResource requestedItem,
+                                    int requestedAmount,
+                                    java.util.Set<Object> excludedStores,
+                                    boolean spendRequestPower) {
         // All or nothing, the way Logistics Pipes treats a request tree: it only fulfils
         // once the whole tree resolves. Committing an incomplete plan starts crafts that
         // can never finish, ties up provider stock in reservations, and leaves half made
@@ -271,6 +303,12 @@ public final class RequestService {
         if (!plan.isComplete()) {
             return new Commitment(0, requestedAmount,
                     "chat.bobbypipes.request.fail.missing", "");
+        }
+
+        if (spendRequestPower && !network.power().trySpend(requester,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.REQUEST)) {
+            return new Commitment(0, requestedAmount,
+                    "chat.bobbypipes.request.fail.no_power", "");
         }
 
         int accepted = 0;
@@ -310,8 +348,18 @@ public final class RequestService {
             }
         }
 
-        accepted += network.craftJobs().enqueue(
-                plan, destNode, requestedItem, stillNeedFromCraft, level.getGameTime());
+        if (stillNeedFromCraft > 0 && !plan.crafts().isEmpty()) {
+            if (network.power().trySpend(requester,
+                    com.bobby.bobbypipes.network.power.PowerSpendKind.CRAFTING)) {
+                accepted += network.craftJobs().enqueue(
+                        plan, destNode, requestedItem, stillNeedFromCraft, level.getGameTime());
+            } else if (failKey.isEmpty() && accepted <= 0) {
+                failKey = "chat.bobbypipes.request.fail.no_power";
+            }
+        } else {
+            accepted += network.craftJobs().enqueue(
+                    plan, destNode, requestedItem, stillNeedFromCraft, level.getGameTime());
+        }
 
         // Kick providers and craft gathering on the committing tick. Remote providers live
         // on their own networks; those advance on their levels' ticks.

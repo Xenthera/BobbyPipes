@@ -28,6 +28,11 @@ public final class ModCapabilities {
                 ModBlockEntities.BASIC_PIPE.get(),
                 (be, side) -> be.itemHandler());
 
+        event.registerBlockEntity(
+                Capabilities.Energy.BLOCK,
+                ModBlockEntities.POWER_JUNCTION.get(),
+                (be, side) -> be.energyHandler(side));
+
         // Plain pipe accepts items too, but they drift rather than being routed. No block
         // entity is involved, so a long run of pipe stays free.
         event.registerBlock(

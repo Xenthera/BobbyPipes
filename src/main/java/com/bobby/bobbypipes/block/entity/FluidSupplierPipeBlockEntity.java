@@ -92,7 +92,11 @@ public class FluidSupplierPipeBlockEntity extends BlockEntity implements MenuPro
         if (need <= 0) {
             return;
         }
-        FluidRequestService.request(level, network, worldPosition, targetFluid, need);
+        if (!network.power().trySpend(worldPosition,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.FLUID_SUPPLIER)) {
+            return;
+        }
+        FluidRequestService.request(level, network, worldPosition, targetFluid, need, false);
     }
 
     @Override

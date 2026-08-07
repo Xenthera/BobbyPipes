@@ -91,7 +91,11 @@ public class EnergySupplierPipeBlockEntity extends BlockEntity implements MenuPr
         if (need <= 0) {
             return;
         }
-        EnergyRequestService.request(level, network, worldPosition, need);
+        if (!network.power().trySpend(worldPosition,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.ENERGY_SUPPLIER)) {
+            return;
+        }
+        EnergyRequestService.request(level, network, worldPosition, need, false);
     }
 
     @Override

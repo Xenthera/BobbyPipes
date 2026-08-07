@@ -174,9 +174,18 @@ public final class FluidSendQueue {
 
             Direction from =
                     FluidAccess.sideHolding(level, job.source, job.fluid, job.excluded).orElse(null);
+            if (!network.power().canAfford(job.source,
+                    com.bobby.bobbypipes.network.power.LogisticsPowerCosts.FLUID_PROVIDER)) {
+                continue;
+            }
             int taken = FluidAccess.extract(level, job.source, job.fluid, want, job.excluded);
             if (taken <= 0) {
                 iterator.remove();
+                continue;
+            }
+            if (!network.power().trySpend(job.source,
+                    com.bobby.bobbypipes.network.power.PowerSpendKind.FLUID_PROVIDER)) {
+                FluidAccess.insert(level, job.source, job.fluid, taken, job.excluded);
                 continue;
             }
 

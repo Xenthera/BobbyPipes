@@ -46,6 +46,7 @@ public final class ModCreativeTabs {
                         // Non-pipe blocks.
                         output.accept(ModBlocks.PATTERN_TABLE.get());
                         output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
+                        output.accept(ModBlocks.POWER_JUNCTION.get());
                         output.accept(ModBlocks.CHUNK_LOADER.get());
 
                         // Items.

@@ -104,7 +104,16 @@ public final class FluidRequestService {
      */
     public static int request(ServerLevel level, PipeNetwork network, BlockPos dest,
                               FluidResource fluid, int amountMb) {
+        return request(level, network, dest, fluid, amountMb, true);
+    }
+
+    public static int request(ServerLevel level, PipeNetwork network, BlockPos dest,
+                              FluidResource fluid, int amountMb, boolean spendRequestPower) {
         if (fluid.isEmpty() || amountMb <= 0) {
+            return 0;
+        }
+        if (spendRequestPower && !network.power().trySpend(dest,
+                com.bobby.bobbypipes.network.power.PowerSpendKind.FLUID_REQUEST)) {
             return 0;
         }
         int alreadyInbound = network.fluidSendQueue().queuedTo(dest, fluid)

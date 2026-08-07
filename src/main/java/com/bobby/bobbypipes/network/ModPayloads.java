@@ -16,6 +16,7 @@ import com.bobby.bobbypipes.network.payload.CraftStatusPayload;
 import com.bobby.bobbypipes.network.payload.ParcelSyncPayload;
 import com.bobby.bobbypipes.network.payload.PatternTableSyncPayload;
 import com.bobby.bobbypipes.network.payload.PipeProbePayload;
+import com.bobby.bobbypipes.network.payload.PowerJunctionSyncPayload;
 import com.bobby.bobbypipes.network.payload.ProbePipePayload;
 import com.bobby.bobbypipes.network.payload.RequestItemPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
@@ -59,6 +60,7 @@ public final class ModPayloads {
                 .playToClient(PatternTableSyncPayload.TYPE, PatternTableSyncPayload.STREAM_CODEC)
                 .playToClient(CraftingPipeSyncPayload.TYPE, CraftingPipeSyncPayload.STREAM_CODEC)
                 .playToClient(PipeProbePayload.TYPE, PipeProbePayload.STREAM_CODEC)
+                .playToClient(PowerJunctionSyncPayload.TYPE, PowerJunctionSyncPayload.STREAM_CODEC)
                 .playToServer(ProbePipePayload.TYPE, ProbePipePayload.STREAM_CODEC,
                         ProbePipePayload::handle)
                 .playToServer(RequestItemPayload.TYPE, RequestItemPayload.STREAM_CODEC,

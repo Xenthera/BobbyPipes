@@ -250,10 +250,19 @@ public final class ProviderSendQueue {
             // the parcel sets off from the arm it actually came out of.
             Direction from =
                     ProviderAccess.sideHolding(level, job.source, job.item, job.excluded).orElse(null);
+            if (!network.power().canAfford(job.source,
+                    com.bobby.bobbypipes.network.power.LogisticsPowerCosts.PROVIDER)) {
+                continue;
+            }
             int taken = ProviderAccess.extract(level, job.source, job.item, want, job.excluded);
             if (taken <= 0) {
                 // Chest emptied or pipe broken - drop the rest of this job.
                 iterator.remove();
+                continue;
+            }
+            if (!network.power().trySpend(job.source,
+                    com.bobby.bobbypipes.network.power.PowerSpendKind.PROVIDER)) {
+                InventoryAccess.insertOrDrop(level, job.source, job.item, taken);
                 continue;
             }
 

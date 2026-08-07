@@ -10,6 +10,7 @@ import com.bobby.bobbypipes.block.entity.EnergySupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.FluidSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PassiveSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
+import com.bobby.bobbypipes.block.entity.PowerJunctionBlockEntity;
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SatellitePipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SupplierPipeBlockEntity;
@@ -73,6 +74,10 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ChunkLoaderBlockEntity>> CHUNK_LOADER =
             BLOCK_ENTITIES.register("chunk_loader", () -> new BlockEntityType<>(
                     ChunkLoaderBlockEntity::new, Set.of(ModBlocks.CHUNK_LOADER.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PowerJunctionBlockEntity>> POWER_JUNCTION =
+            BLOCK_ENTITIES.register("power_junction", () -> new BlockEntityType<>(
+                    PowerJunctionBlockEntity::new, Set.of(ModBlocks.POWER_JUNCTION.get())));
 
     private ModBlockEntities() {
     }

@@ -11,6 +11,7 @@ import com.bobby.bobbypipes.menu.EnergySupplierPipeMenu;
 import com.bobby.bobbypipes.menu.FluidRequestMenu;
 import com.bobby.bobbypipes.menu.FluidSupplierPipeMenu;
 import com.bobby.bobbypipes.menu.PatternTableMenu;
+import com.bobby.bobbypipes.menu.PowerJunctionMenu;
 import com.bobby.bobbypipes.menu.ProviderPipeMenu;
 import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.menu.SatellitePipeMenu;
@@ -68,6 +69,9 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<ChunkLoaderMenu>> CHUNK_LOADER =
             MENUS.register("chunk_loader", () -> IMenuTypeExtension.create(ChunkLoaderMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<PowerJunctionMenu>> POWER_JUNCTION =
+            MENUS.register("power_junction", () -> IMenuTypeExtension.create(PowerJunctionMenu::new));
 
     private ModMenus() {
     }
