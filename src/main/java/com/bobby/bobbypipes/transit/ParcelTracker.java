@@ -178,6 +178,28 @@ public final class ParcelTracker<N, P> {
         return Optional.ofNullable(removed).map(Parcel::payload);
     }
 
+    /** Every parcel currently in flight, for save data. */
+    public java.util.List<Parcel<N, P>> capture() {
+        return java.util.List.copyOf(parcels.values());
+    }
+
+    /**
+     * Replaces the in-flight set with {@code loaded}.
+     *
+     * <p>Seeds {@link #nextId} past every restored id: reusing one would let a later cancel or
+     * delivery settle the wrong parcel. Loaded parcels carry a deliberately stale revision, so
+     * the first tick re-solves their next hop against the rebuilt routing snapshot.
+     */
+    public void restore(java.util.Collection<Parcel<N, P>> loaded) {
+        parcels.clear();
+        long highest = 0L;
+        for (Parcel<N, P> parcel : loaded) {
+            parcels.put(parcel.id(), parcel);
+            highest = Math.max(highest, parcel.id());
+        }
+        nextId = Math.max(nextId, highest + 1L);
+    }
+
     public void clear() {
         parcels.clear();
     }

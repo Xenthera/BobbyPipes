@@ -130,6 +130,21 @@ public final class DriftTracker {
         return ARM_TICKS;
     }
 
+    /** Every drifting item, for save data. These are real items; losing them voids them. */
+    public java.util.List<Drifting> capture() {
+        return java.util.List.copyOf(items.values());
+    }
+
+    public void restore(java.util.Collection<Drifting> loaded) {
+        items.clear();
+        long highest = 0L;
+        for (Drifting drifting : loaded) {
+            items.put(drifting.id(), drifting);
+            highest = Math.max(highest, drifting.id());
+        }
+        nextId = Math.max(nextId, highest + 1L);
+    }
+
     public void clear() {
         items.clear();
     }

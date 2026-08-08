@@ -222,6 +222,31 @@ public final class FluidSendQueue {
         return sum > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) sum;
     }
 
+    /** A queued transfer as save data. Fluid exclusions are plain positions, so they keep. */
+    public record SavedJob(BlockPos source, BlockPos dest, FluidResource fluid, int remaining,
+                           java.util.List<BlockPos> excluded) {
+    }
+
+    public java.util.List<SavedJob> capture() {
+        java.util.List<SavedJob> out = new ArrayList<>(jobs.size());
+        for (Job job : jobs) {
+            out.add(new SavedJob(job.source, job.dest, job.fluid, job.remaining,
+                    java.util.List.copyOf(job.excluded)));
+        }
+        return out;
+    }
+
+    public void restore(java.util.List<SavedJob> loaded) {
+        jobs.clear();
+        for (SavedJob saved : loaded) {
+            if (saved.remaining() <= 0 || saved.fluid().isEmpty()) {
+                continue;
+            }
+            jobs.add(new Job(saved.source(), saved.dest(), saved.fluid(), saved.remaining(),
+                    new java.util.HashSet<>(saved.excluded())));
+        }
+    }
+
     private static final class Job {
         private final BlockPos source;
         private final BlockPos dest;

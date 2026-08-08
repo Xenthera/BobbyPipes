@@ -138,6 +138,20 @@ public class PipeBlock extends Block implements SimpleWaterloggedBlock, EntityBl
         return block instanceof RoutedPipeBlock;
     }
 
+    /**
+     * Pipes a Power Junction feeds, and which therefore draw an arm toward one.
+     *
+     * <p>Routers plus link mouths: a link hop is charged FE like any other routing action, so
+     * a link pipe is as much a consumer as a router. Plain transport pipe is not - it does no
+     * routing, spends nothing, and a junction has nothing to offer it.
+     *
+     * <p>One predicate rather than a check per call site, because the arm and the power have
+     * to agree: an arm that promises power the junction will not supply is worse than no arm.
+     */
+    public static boolean isPowerable(Block block) {
+        return isSmartPipe(block) || block instanceof LinkPipeBlock;
+    }
+
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(WATERLOGGED, COVERED, NORTH, EAST, SOUTH, WEST, UP, DOWN);
@@ -210,6 +224,13 @@ public class PipeBlock extends Block implements SimpleWaterloggedBlock, EntityBl
         }
         if (level.getBlockState(neighbour).getBlock() instanceof PipeBlock) {
             return existingPipeMark.isPipe() ? existingPipeMark : PipeConnection.INDIRECT;
+        }
+        if (level.getBlockState(neighbour).getBlock() instanceof PowerJunctionBlock) {
+            // Deliberately not a capability question. A junction powers exactly the smart
+            // pipes beside it, and the arm is how a player sees that - nothing flows down it,
+            // it is the visual continuity of the power connection. Plain pipe draws no arm
+            // because a junction has nothing to offer it.
+            return isPowerable(this) ? PipeConnection.INVENTORY : PipeConnection.NONE;
         }
         // Capability lookup needs a real Level; during placement previews it may not be one.
         if (level instanceof Level realLevel && !realLevel.isClientSide()) {

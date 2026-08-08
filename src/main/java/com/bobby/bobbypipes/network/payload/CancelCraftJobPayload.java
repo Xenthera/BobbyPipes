@@ -41,8 +41,14 @@ public record CancelCraftJobPayload(long jobId) implements CustomPacketPayload {
                     || !(player.level() instanceof ServerLevel level)) {
                 return;
             }
-            PipeNetwork network = PipeNetwork.get(level);
-            network.craftJobs().cancel(level, network, payload.jobId());
+            // The monitor now lists jobs from across live links, so the job behind this
+            // button need not live on the clicking player's level. Job ids are unique across
+            // managers, so the first network that owns it is the right one.
+            for (PipeNetwork network : PipeNetwork.instances()) {
+                if (network.craftJobs().cancel(network.level(), network, payload.jobId())) {
+                    return;
+                }
+            }
         });
     }
 }

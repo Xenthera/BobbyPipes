@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * Ring buffer of per-kind FE spends (and optional FE in) for the junction graph.
  *
- * <p>Pure data — no Minecraft types — so unit tests can exercise rollup without a level.
+ * <p>Pure data - no Minecraft types - so unit tests can exercise rollup without a level.
  */
 public final class PowerUsageSampler {
 
@@ -63,7 +63,7 @@ public final class PowerUsageSampler {
         return capacity;
     }
 
-    /** Oldest → newest. Index 0 is the oldest retained sample. */
+    /** Oldest -> newest. Index 0 is the oldest retained sample. */
     public Sample sampleAt(int chronologicalIndex) {
         if (chronologicalIndex < 0 || chronologicalIndex >= size) {
             throw new IndexOutOfBoundsException(chronologicalIndex);

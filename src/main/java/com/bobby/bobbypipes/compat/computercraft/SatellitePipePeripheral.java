@@ -11,7 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
 /**
- * ComputerCraft peripheral for Satellite pipes — name get/set with duplicate checks.
+ * ComputerCraft peripheral for Satellite pipes - name get/set with duplicate checks.
  */
 public final class SatellitePipePeripheral implements IPeripheral {
 

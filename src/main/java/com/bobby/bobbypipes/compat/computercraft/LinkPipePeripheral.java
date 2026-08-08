@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * ComputerCraft peripheral for Link pipes — channel and pair status.
+ * ComputerCraft peripheral for Link pipes - channel and pair status.
  */
 public final class LinkPipePeripheral implements IPeripheral {
 

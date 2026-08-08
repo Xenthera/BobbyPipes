@@ -50,14 +50,14 @@ public class LinkPipeBlockEntity extends PipeBlockEntity implements MenuProvider
 
     /**
      * True when the pair claim is complete and both endpoint chunks are loaded.
-     * Unloaded peer ⇒ still paired, but the wormhole edge is severed.
+     * An unloaded peer is still paired, but the wormhole edge is severed.
      */
     public boolean isLive() {
         if (channel <= 0 || !(level instanceof ServerLevel serverLevel)) {
             return false;
         }
         return LinkPipeRegistry.get(serverLevel)
-                .isLive(serverLevel.getServer(), PipeNodeId.of(serverLevel, worldPosition));
+                .isLive(PipeNodeId.of(serverLevel, worldPosition));
     }
 
     /**
@@ -108,7 +108,9 @@ public class LinkPipeBlockEntity extends PipeBlockEntity implements MenuProvider
         previousPeer.ifPresent(peer -> {
             registry.invalidatePairNetworks(level.getServer(), peer);
             ServerLevel peerLevel = LinkPipeRegistry.levelOf(level.getServer(), peer);
-            if (peerLevel != null && peerLevel.hasChunkAt(peer.pos())) {
+            // isLoaded, not hasChunkAt: repainting a peer that is not really in the level
+            // would read its block entity and so force its chunk back in.
+            if (peerLevel != null && LinkPipeRegistry.isLoaded(peer)) {
                 LinkPipeBlock.refreshLinkStatus(peerLevel, peer.pos());
             }
         });
@@ -127,16 +129,26 @@ public class LinkPipeBlockEntity extends PipeBlockEntity implements MenuProvider
     @Override
     public void onChunkUnloaded() {
         unloadedByChunk = true;
-        if (level instanceof ServerLevel serverLevel && channel > 0) {
+        if (level instanceof ServerLevel serverLevel) {
             PipeNodeId self = PipeNodeId.of(serverLevel, worldPosition);
-            LinkPipeRegistry.get(serverLevel)
-                    .onEndpointChunkChange(serverLevel.getServer(), self);
+            // Before the refresh, not after: onEndpointChunkChange recomputes the peer's
+            // status, and that must already see this end as gone. Unconditional for the same
+            // reason marking it loaded is - presence is not about owning a channel.
+            LinkPipeRegistry.markUnloaded(self);
+            if (channel > 0) {
+                LinkPipeRegistry.get(serverLevel)
+                        .onEndpointChunkChange(serverLevel.getServer(), self);
+            }
         }
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel) {
+            // Gone from the level whichever way it left.
+            LinkPipeRegistry.markUnloaded(PipeNodeId.of(serverLevel, worldPosition));
+        }
         if (!unloadedByChunk && level instanceof ServerLevel serverLevel) {
             PipeNodeId self = PipeNodeId.of(serverLevel, worldPosition);
             LinkPipeRegistry registry = LinkPipeRegistry.get(serverLevel);
@@ -152,8 +164,17 @@ public class LinkPipeBlockEntity extends PipeBlockEntity implements MenuProvider
     public void onLoad() {
         super.onLoad();
         unloadedByChunk = false;
-        if (level instanceof ServerLevel serverLevel && channel > 0) {
-            PipeNodeId self = PipeNodeId.of(serverLevel, worldPosition);
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        PipeNodeId self = PipeNodeId.of(serverLevel, worldPosition);
+        // Presence in the level has nothing to do with owning a channel, and gating it on
+        // one meant a freshly placed pipe never registered: onLoad runs while its channel is
+        // still zero, and setting a channel afterwards claims the pair without ever saying
+        // "this end is here". Its peer then read it as unloaded and sat severed with both
+        // ends in plain sight.
+        LinkPipeRegistry.markLoaded(self);
+        if (channel > 0) {
             LinkPipeRegistry registry = LinkPipeRegistry.get(serverLevel);
             LinkClaimResult result = registry.claim(self, channel);
             if (result == LinkClaimResult.CHANNEL_FULL) {
@@ -163,7 +184,7 @@ public class LinkPipeBlockEntity extends PipeBlockEntity implements MenuProvider
                 registry.invalidatePairNetworks(serverLevel.getServer(), self);
                 registry.peerOf(self).ifPresent(peer -> {
                     ServerLevel peerLevel = LinkPipeRegistry.levelOf(serverLevel.getServer(), peer);
-                    if (peerLevel != null && peerLevel.hasChunkAt(peer.pos())) {
+                    if (peerLevel != null && LinkPipeRegistry.isLoaded(peer)) {
                         LinkPipeBlock.refreshLinkStatus(peerLevel, peer.pos());
                     }
                 });

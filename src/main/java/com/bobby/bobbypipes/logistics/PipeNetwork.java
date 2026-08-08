@@ -124,6 +124,21 @@ public final class PipeNetwork {
     private final Map<Long, CrossDimTrip> energyCrossTrips = new HashMap<>();
     private final Map<Long, CrossDimTrip> fluidCrossTrips = new HashMap<>();
 
+    /**
+     * Items that arrived at a destination with no room, kept until there is.
+     *
+     * <p>Never re-addressed. The planner splits a multi-ingredient craft across several
+     * machines as matched sets - so much copper and so much redstone to each alloy smelter -
+     * and handing an overflow to whichever machine happens to have room breaks that pairing:
+     * one smelter ends up with copper it has no redstone for while the one that was owed it
+     * starves. The only safe recovery is to deliver the original items to the original place.
+     */
+    private final List<PendingArrival> pendingArrivals = new ArrayList<>();
+
+    /** An arrival still waiting for room, and the promise it will finish settling. */
+    public record PendingArrival(BlockPos dest, ItemResource item, int count, long promiseId) {
+    }
+
     private record CrossDimTrip(PipeNodeId finalDest, PipeNodeId peer, boolean wormhole) {
         CrossDimTrip asWormhole() {
             return new CrossDimTrip(finalDest, peer, true);
@@ -140,6 +155,136 @@ public final class PipeNetwork {
         this.parcels.setHopBeginGate(this::allowParcelHop);
         this.energyParcels.setHopBeginGate(this::allowParcelHop);
         this.fluidParcels.setHopBeginGate(this::allowParcelHop);
+        attachSaveData();
+    }
+
+    /** Ticks between marking the save data dirty while the network has work in progress. */
+    private static final int SAVE_MARK_INTERVAL = 100;
+
+    /**
+     * Binds this network to its level's save data, restoring whatever was on disk.
+     *
+     * <p>Done as part of construction so no tick can run against an empty network and, for
+     * instance, conclude that a restored craft job's crafter has vanished.
+     */
+    private void attachSaveData() {
+        PipeNetworkSavedData saved = PipeNetworkSavedData.get(level);
+        restore(saved.attach(this::capture));
+    }
+
+    /** The whole of this network's in-progress state, for save data. */
+    PipeNetworkSavedData.Snapshot capture() {
+        return new PipeNetworkSavedData.Snapshot(
+                craftJobs.capture(),
+                sendQueue.capture(),
+                energySendQueue.capture(),
+                fluidSendQueue.capture(),
+                parcels.capture(),
+                energyParcels.capture(),
+                fluidParcels.capture(),
+                ledger.capture(),
+                energyLedger.capture(),
+                fluidLedger.capture(),
+                captureTrips(itemCrossTrips),
+                captureTrips(energyCrossTrips),
+                captureTrips(fluidCrossTrips),
+                drift.capture(),
+                List.copyOf(pendingArrivals));
+    }
+
+    void restore(PipeNetworkSavedData.Snapshot snapshot) {
+        craftJobs.restore(snapshot.craftJobs());
+        // Store identities are rebuilt from the destination rather than saved; see
+        // ProviderSendQueue.SavedJob for why a saved one would be meaningless.
+        sendQueue.restore(snapshot.itemQueue(),
+                dest -> InventoryAccess.attachedIdentities(level, dest));
+        energySendQueue.restore(snapshot.energyQueue());
+        fluidSendQueue.restore(snapshot.fluidQueue());
+        parcels.restore(snapshot.itemParcels());
+        energyParcels.restore(snapshot.energyParcels());
+        fluidParcels.restore(snapshot.fluidParcels());
+        ledger.restore(snapshot.itemPromises());
+        energyLedger.restore(snapshot.energyPromises());
+        fluidLedger.restore(snapshot.fluidPromises());
+        restoreTrips(itemCrossTrips, snapshot.itemTrips());
+        restoreTrips(energyCrossTrips, snapshot.energyTrips());
+        restoreTrips(fluidCrossTrips, snapshot.fluidTrips());
+        drift.restore(snapshot.drifting());
+        pendingArrivals.clear();
+        pendingArrivals.addAll(snapshot.pendingArrivals());
+    }
+
+    private static List<PipeNetworkSavedData.CrossTrip> captureTrips(
+            Map<Long, CrossDimTrip> trips) {
+        List<PipeNetworkSavedData.CrossTrip> out = new ArrayList<>(trips.size());
+        for (Map.Entry<Long, CrossDimTrip> entry : trips.entrySet()) {
+            CrossDimTrip trip = entry.getValue();
+            out.add(new PipeNetworkSavedData.CrossTrip(
+                    entry.getKey(), trip.finalDest(), trip.peer(), trip.wormhole()));
+        }
+        return out;
+    }
+
+    private static void restoreTrips(Map<Long, CrossDimTrip> trips,
+                                     List<PipeNetworkSavedData.CrossTrip> loaded) {
+        trips.clear();
+        for (PipeNetworkSavedData.CrossTrip trip : loaded) {
+            trips.put(trip.parcelId(),
+                    new CrossDimTrip(trip.finalDest(), trip.peer(), trip.wormhole()));
+        }
+    }
+
+    /** True while there is anything worth writing to disk. */
+    private boolean hasSaveableState() {
+        return craftJobs.jobCount() > 0
+                || !pendingArrivals.isEmpty()
+                || parcels.inFlight() > 0
+                || energyParcels.inFlight() > 0
+                || fluidParcels.inFlight() > 0
+                || drift.inFlight() > 0
+                || ledger.openCount() > 0
+                || energyLedger.openCount() > 0
+                || fluidLedger.openCount() > 0;
+    }
+
+    /**
+     * Keeps items that would not fit at their destination.
+     *
+     * <p>Called instead of dropping them: dropping settled the promise as delivered, so the
+     * craft job believed it had been supplied, its stock binding was spent, and it waited
+     * forever on material lying on the floor.
+     */
+    void holdArrival(BlockPos dest, ItemResource item, int count, long promiseId) {
+        if (item.isEmpty() || count <= 0) {
+            return;
+        }
+        pendingArrivals.add(new PendingArrival(dest.immutable(), item, count, promiseId));
+    }
+
+    /** Retries held arrivals, settling each promise by however much actually landed. */
+    private void retryPendingArrivals() {
+        if (pendingArrivals.isEmpty()) {
+            return;
+        }
+        List<PendingArrival> stillWaiting = new ArrayList<>(pendingArrivals.size());
+        for (PendingArrival pending : pendingArrivals) {
+            if (!level.hasChunkAt(pending.dest())) {
+                stillWaiting.add(pending);
+                continue;
+            }
+            int placed = InventoryAccess.insert(
+                    level, pending.dest(), pending.item(), pending.count());
+            if (placed > 0) {
+                settleItemDelivery(pending.promiseId(), placed);
+            }
+            int left = pending.count() - placed;
+            if (left > 0) {
+                stillWaiting.add(new PendingArrival(
+                        pending.dest(), pending.item(), left, pending.promiseId()));
+            }
+        }
+        pendingArrivals.clear();
+        pendingArrivals.addAll(stillWaiting);
     }
 
     public ComponentPower power() {
@@ -327,7 +472,7 @@ public final class PipeNetwork {
         return flying;
     }
 
-    ServerLevel level() {
+    public ServerLevel level() {
         return level;
     }
 
@@ -456,6 +601,7 @@ public final class PipeNetwork {
                 promoteStagingDeliveries(energyParcels.tick(cache.current()), energyParcels, energyCrossTrips));
         FluidRequestService.handle(level, this,
                 promoteStagingDeliveries(fluidParcels.tick(cache.current()), fluidParcels, fluidCrossTrips));
+        retryPendingArrivals();
         drift.tick(this);
         syncParcels();
         if (level.getGameTime() % 10 == 0) {
@@ -466,6 +612,12 @@ public final class PipeNetwork {
         ledger.expire(level.getGameTime());
         energyLedger.expire(level.getGameTime());
         fluidLedger.expire(level.getGameTime());
+
+        // The snapshot is read from this network at write time, so this only has to say "there
+        // is something to write" often enough that a save never skips a busy network.
+        if (level.getGameTime() % SAVE_MARK_INTERVAL == 0 && hasSaveableState()) {
+            PipeNetworkSavedData.get(level).setDirty();
+        }
         return rebuilt;
     }
 
@@ -484,7 +636,13 @@ public final class PipeNetwork {
         if (level.players().isEmpty() || level.getGameTime() % CRAFT_STATUS_INTERVAL != 0) {
             return;
         }
-        List<CraftStatusPayload.Entry> entries = craftJobs.holograms(level, this);
+        // Every manager, not just this level's: a job is queued on the requester's level, so
+        // a craft running on a pipe in this dimension may be owned by another one. holograms()
+        // already keeps only crafters that live in the level it is handed.
+        List<CraftStatusPayload.Entry> entries = new ArrayList<>();
+        for (PipeNetwork candidate : instances()) {
+            entries.addAll(candidate.craftJobs().holograms(level, this));
+        }
         if (entries.isEmpty()) {
             // One empty packet clears the overlay; repeating it every tick would not.
             if (!lastCraftStatusWasEmpty) {
@@ -689,7 +847,13 @@ public final class PipeNetwork {
                                             PipeNodeId to) {
         PipeNodeId fromId = PipeNodeId.of(level, from);
         if (fromId.sameDimension(to)) {
-            return tracker.inject(shipment, from, to.pos(), cache.current());
+            Optional<Long> local = tracker.inject(shipment, from, to.pos(), cache.current());
+            if (local.isPresent()) {
+                return local;
+            }
+            // Same dimension does not mean locally connected. A chain that hops out to
+            // another dimension and back finishes where it started, so falling straight
+            // through to "no route" stranded every delivery on that shape.
         }
         Optional<PipeNodeId> staging = stagingLink(fromId, to);
         if (staging.isEmpty()) {
@@ -808,26 +972,73 @@ public final class PipeNetwork {
                                           PipeNodeId at,
                                           PipeNodeId dest) {
         // Drop the source-side extract arm: that Direction is meaningless on the peer and
-        // makes the client animate out of the wrong face (looks like request↔link bounce).
+        // makes the client animate out of the wrong face (looks like request<->link bounce).
         P emerged = clearEntrySide(shipment);
         if (at.equals(dest)) {
-            tracker.inject(emerged, at.pos(), dest.pos(), cache.current());
+            abandonIfUninjected(tracker, tracker.inject(emerged, at.pos(), dest.pos(), cache.current()),
+                    emerged, at.pos());
             return;
         }
         if (!at.sameDimension(dest) || !at.dimension().equals(level.dimension())) {
             // Still need another wormhole (chained links) - stage again.
-            injectToward(tracker, trips, emerged, at.pos(), dest);
+            abandonIfUninjected(tracker, injectToward(tracker, trips, emerged, at.pos(), dest),
+                    emerged, at.pos());
             return;
         }
-        // Local routes only. LinkTransit / CrossDim must not choose the return wormhole as
-        // the first hop or the parcel bounces link ↔ neighbour forever.
+        // Local first: LinkTransit / CrossDim must not be allowed to pick the return wormhole
+        // as the first hop while a plain pipe route exists, or the parcel bounces
+        // link <-> neighbour forever.
         Optional<BlockPos> onward = cache.current().nextHop(at.pos(), dest.pos());
         if (onward.isEmpty() || !isCardinalNeighbour(at.pos(), onward.get()) || !isPipe(level, onward.get())) {
-            tracker.inject(emerged, at.pos(), dest.pos(), cache.current());
+            // ...but no local route is not the same as no route. Emerging from a link into the
+            // dimension the destination is in says nothing about being on its pipe component:
+            // a chain that leaves and returns can put the two ends in the same world with only
+            // a wormhole between them, which is how a four crossing route lost its cargo on
+            // the last leg. Stage across links before giving up, exactly as injectToward does.
+            Optional<Long> local = tracker.inject(emerged, at.pos(), dest.pos(), cache.current());
+            if (local.isEmpty()) {
+                local = injectToward(tracker, trips, emerged, at.pos(), dest);
+            }
+            abandonIfUninjected(tracker, local, emerged, at.pos());
             return;
         }
         tracker.injectWithFirstHop(
                 emerged, at.pos(), dest.pos(), onward.get(), cache.current().revision());
+    }
+
+    /**
+     * Every re-injection after a link handoff can come back empty - that is what a routing
+     * snapshot says when it cannot get from here to the destination - and until now those
+     * results were discarded. The payload then existed nowhere: not in a tracker, not in an
+     * inventory, not in the world, with its promise still open, so the requester waited
+     * forever on cargo that had been silently deleted. A chain of four link crossings finds
+     * this readily, because each crossing re-injects.
+     *
+     * <p>An unroutable parcel is put on the ground where it emerged and its promise released,
+     * the same bargain as an unpayable link toll: visible and recoverable beats invisible.
+     */
+    private <P> void abandonIfUninjected(ParcelTracker<BlockPos, P> tracker,
+                                         Optional<Long> injected,
+                                         P payload,
+                                         BlockPos at) {
+        if (injected.isEmpty()) {
+            abandon(tracker, payload, at);
+        }
+    }
+
+    /** Spits a parcel out into the world at {@code at} and cancels the promise behind it. */
+    private <P> void abandon(ParcelTracker<BlockPos, P> tracker, P payload, BlockPos at) {
+        if (tracker == parcels) {
+            ItemShipment shipment = (ItemShipment) payload;
+            InventoryAccess.drop(level, at, shipment.resource(), shipment.count());
+            cancelItemPromise(shipment.promiseId());
+        } else if (tracker == energyParcels) {
+            // Nothing to drop - loose FE is not a thing in the world - but the promise must
+            // still be released or the requester waits on energy that no longer exists.
+            cancelEnergyPromise(((EnergyShipment) payload).promiseId());
+        } else {
+            cancelFluidPromise(((FluidShipment) payload).promiseId());
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -898,9 +1109,10 @@ public final class PipeNetwork {
                 kept.add(delivery);
                 continue;
             }
-            // Pay interdim link toll before leaving this level; stall (re-queue) if brownout.
+            // Pay the interdim link toll before leaving this level; drop on brownout rather
+            // than queue at the mouth.
             if (!power.trySpendLinkInterdim(delivery.destination(), trip.peer(), delivery.id())) {
-                requeueStaging(tracker, trips, delivery, trip);
+                dropUnpaidStaging(tracker, trips, delivery);
                 continue;
             }
             trips.remove(delivery.id());
@@ -919,23 +1131,22 @@ public final class PipeNetwork {
     }
 
     /**
-     * Puts a brownout-stalled staging delivery back on the local link mouth so the next
-     * tick can retry the interdim toll without voiding the parcel.
+     * A parcel that cannot pay the interdim toll is spat out at the link mouth and its
+     * promise cancelled.
+     *
+     * <p>This used to re-queue for a retry next tick, which is the more forgiving thing to
+     * do with the item but the wrong thing to do to the server: an underpowered wormhole
+     * accumulates parcels at its mouth forever, and every one of them re-probes the power
+     * network every tick. Dropping keeps the queue bounded and puts the failure somewhere
+     * the player can see it and pick it up. Cancelling the promise is what lets the job
+     * ask again rather than wait on a delivery that is now lying on the floor.
      */
-    private <P> void requeueStaging(ParcelTracker<BlockPos, P> tracker,
-                                    Map<Long, CrossDimTrip> trips,
-                                    ParcelTracker.Delivery<BlockPos, P> delivery,
-                                    CrossDimTrip trip) {
+    private <P> void dropUnpaidStaging(ParcelTracker<BlockPos, P> tracker,
+                                       Map<Long, CrossDimTrip> trips,
+                                       ParcelTracker.Delivery<BlockPos, P> delivery) {
         power.clearLinkToll(delivery.id());
         trips.remove(delivery.id());
-        Optional<Long> id = tracker.injectContinuing(
-                delivery.payload(),
-                delivery.destination(),
-                delivery.destination(),
-                null,
-                TICKS_PER_HOP,
-                cache.current().revision());
-        id.ifPresent(parcelId -> trips.put(parcelId, trip));
+        abandon(tracker, delivery.payload(), delivery.destination());
     }
 
     private <P> void handoffStaging(ParcelTracker<BlockPos, P> tracker, P payload, CrossDimTrip trip) {
@@ -1144,7 +1355,7 @@ public final class PipeNetwork {
             if (!pair.a().dimension().equals(level.dimension())) {
                 continue;
             }
-            if (!LinkPipeRegistry.bothLoaded(level.getServer(), pair.a(), pair.b())) {
+            if (!LinkPipeRegistry.bothLoaded(pair.a(), pair.b())) {
                 continue;
             }
             builder.node(pair.a().pos());
@@ -1196,8 +1407,8 @@ public final class PipeNetwork {
             // Link mouths are corridor endpoints so a cross-dim wormhole (no local virtual
             // edge) is still reachable for staging parcels and arm marks. Same-dim pairs
             // already get a degree-2 virtual edge; treating the mouth as smart still
-            // routes BasicA → Link → peer Link → BasicB correctly.
-            if (PipeBlock.isSmartPipe(block) || block instanceof LinkPipeBlock) {
+            // routes BasicA -> Link -> peer Link -> BasicB correctly.
+            if (PipeBlock.isPowerable(block)) {
                 smart.add(pos);
             }
         }

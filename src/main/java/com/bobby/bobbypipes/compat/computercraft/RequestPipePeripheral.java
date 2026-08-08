@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ComputerCraft peripheral for the item Request Pipe (no block entity — pos-based).
+ * ComputerCraft peripheral for the item Request Pipe (no block entity - pos-based).
  */
 public final class RequestPipePeripheral implements IPeripheral {
 

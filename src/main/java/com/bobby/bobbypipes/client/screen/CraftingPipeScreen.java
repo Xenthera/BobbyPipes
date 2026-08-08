@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
@@ -213,16 +214,24 @@ public class CraftingPipeScreen extends ThemedContainerScreen<CraftingPipeMenu> 
             ItemStack carried = minecraft.player != null
                     ? minecraft.player.containerMenu.getCarried()
                     : ItemStack.EMPTY;
-            ItemStack ghost = carried.isEmpty() ? ItemStack.EMPTY : carried.copyWithCount(1);
             CraftPattern pattern = menu.pattern();
             CraftPattern base = pattern.kind() != CraftPattern.Kind.SHAPED
                     ? CraftPattern.shaped(pattern.inputs(), pattern.primaryOutput(), pattern.satellite())
                     : pattern;
-            if (index == GhostCraftingLayout.RESULT_INDEX) {
-                push(base.withOutput(0, ghost));
-            } else {
-                push(base.withInput(index, ghost));
+            // Same idiom as the supplier's stock targets, on both sides of the recipe:
+            // right-click adds one, left-click adds the held stack, empty-handed clears.
+            // Both ingredients() and results() already honour a per-run count - only this
+            // click path was throwing it away.
+            boolean isResult = index == GhostCraftingLayout.RESULT_INDEX;
+            if (carried.isEmpty()) {
+                push(isResult ? base.withOutput(0, ItemStack.EMPTY)
+                        : base.withInput(index, ItemStack.EMPTY));
+                return true;
             }
+            int add = event.button() == 1 ? 1 : carried.getCount();
+            ItemStack current = isResult ? base.primaryOutput() : base.inputs().get(index);
+            ItemStack updated = addToGhost(current, carried, add);
+            push(isResult ? base.withOutput(0, updated) : base.withInput(index, updated));
             return true;
         }
         return super.mouseClicked(event, doubleClick);
@@ -238,12 +247,58 @@ public class CraftingPipeScreen extends ThemedContainerScreen<CraftingPipeMenu> 
         if (ghost.isEmpty()) {
             return;
         }
-        graphics.setTooltipForNextFrame(
-                font, List.of(ghost.getHoverName()), Optional.empty(), ghost, mouseX, mouseY);
+        boolean overResult = CraftingPipeLayout.hitTest(mouseX, mouseY, leftPos, topPos)
+                .stream().anyMatch(i -> i == GhostCraftingLayout.RESULT_INDEX);
+        List<Component> lines = ghost.getCount() > 1
+                ? List.of(ghost.getHoverName(), Component.translatable(
+                        overResult ? "gui.bobbypipes.crafting.per_craft"
+                                : "gui.bobbypipes.crafting.per_craft.input",
+                        ghost.getCount()))
+                : List.of(ghost.getHoverName());
+        graphics.setTooltipForNextFrame(font, lines, Optional.empty(), ghost, mouseX, mouseY);
+    }
+
+    /**
+     * Adds {@code amount} of {@code carried} into a ghost slot, replacing on a different item.
+     *
+     * <p>Capped at the item's own stack size: the crafter's output slot cannot hold more than
+     * that of one run's result, and {@code outputCapRuns} divides by this count when sizing an
+     * extract batch, so a larger value would describe a craft the machine can never complete.
+     */
+    private static ItemStack addToGhost(ItemStack current, ItemStack carried, int amount) {
+        int max = Math.max(1, carried.getMaxStackSize());
+        if (current.isEmpty() || !ItemStack.isSameItemSameComponents(current, carried)) {
+            return carried.copyWithCount(Mth.clamp(amount, 1, max));
+        }
+        return current.copyWithCount(Mth.clamp(current.getCount() + amount, 1, max));
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        var scrolled = CraftingPipeLayout.hitTest(mouseX, mouseY, leftPos, topPos);
+        if (!listOpen && scrolled.isPresent()) {
+            int index = scrolled.getAsInt();
+            CraftPattern pattern = menu.pattern();
+            boolean isResult = index == GhostCraftingLayout.RESULT_INDEX;
+            ItemStack current = isResult
+                    ? pattern.primaryOutput()
+                    : (index < pattern.inputs().size() ? pattern.inputs().get(index) : ItemStack.EMPTY);
+            if (current.isEmpty()) {
+                return true;
+            }
+            int delta = scrollY > 0 ? 1 : -1;
+            if (minecraft != null && minecraft.hasShiftDown()) {
+                delta *= 16;
+            }
+            int max = Math.max(1, current.getMaxStackSize());
+            ItemStack updated =
+                    current.copyWithCount(Mth.clamp(current.getCount() + delta, 1, max));
+            CraftPattern base = pattern.kind() != CraftPattern.Kind.SHAPED
+                    ? CraftPattern.shaped(pattern.inputs(), pattern.primaryOutput(), pattern.satellite())
+                    : pattern;
+            push(isResult ? base.withOutput(0, updated) : base.withInput(index, updated));
+            return true;
+        }
         if (listOpen && satelliteNames.size() > 4) {
             if (scrollY > 0) {
                 listIndex = Math.max(0, listIndex - 1);

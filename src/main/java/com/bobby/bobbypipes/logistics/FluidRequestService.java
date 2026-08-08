@@ -109,7 +109,23 @@ public final class FluidRequestService {
 
     public static int request(ServerLevel level, PipeNetwork network, BlockPos dest,
                               FluidResource fluid, int amountMb, boolean spendRequestPower) {
+        return request(level, network, dest, fluid, amountMb, spendRequestPower, true);
+    }
+
+    /**
+     * @param allowPartial when false, queue nothing unless the whole {@code amountMb} can be
+     *                     supplied and received right now. Automated callers keep the
+     *                     default of true; only the request screen offers the choice.
+     */
+    public static int request(ServerLevel level, PipeNetwork network, BlockPos dest,
+                              FluidResource fluid, int amountMb, boolean spendRequestPower,
+                              boolean allowPartial) {
         if (fluid.isEmpty() || amountMb <= 0) {
+            return 0;
+        }
+        // Checked before the power spend so an all-or-nothing request that cannot be filled
+        // costs nothing: it never reached a provider.
+        if (!allowPartial && !canSupplyInFull(level, network, dest, fluid, amountMb)) {
             return 0;
         }
         if (spendRequestPower && !network.power().trySpend(dest,
@@ -166,6 +182,30 @@ public final class FluidRequestService {
     private static int saturatingAdd(int a, int b) {
         long sum = (long) a + (long) b;
         return sum > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) sum;
+    }
+
+    /**
+     * True when the full {@code amountMb} could both be supplied by the network and received
+     * by {@code dest} right now.
+     *
+     * <p>Both halves matter: a request for a full tank fails all-or-nothing just as much when
+     * the destination has no room as when the network has no fluid.
+     */
+    private static boolean canSupplyInFull(ServerLevel level, PipeNetwork network, BlockPos dest,
+                                           FluidResource fluid, int amountMb) {
+        int alreadyInbound = network.fluidSendQueue().queuedTo(dest, fluid)
+                + network.fluidLedger().inbound(dest, fluid);
+        int freeSpace = FluidAccess.insertable(
+                level, dest, fluid, saturatingAdd(alreadyInbound, amountMb));
+        if (Math.max(0, freeSpace - alreadyInbound) < amountMb) {
+            return false;
+        }
+        for (Entry entry : catalog(level, network, dest)) {
+            if (entry.fluid().equals(fluid)) {
+                return entry.amountMb() >= amountMb;
+            }
+        }
+        return false;
     }
 
     /**

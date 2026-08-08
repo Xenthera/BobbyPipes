@@ -108,20 +108,95 @@ class CraftJobPolicyTest {
     @Test
     @DisplayName("extract batch waits for output slot cap, but never past what runs remain")
     void extractBatchRunsWaitsForCapOrFlushesEarly() {
-        assertEquals(0, CraftJobPolicy.extractBatchRuns(0, 100, 64, true),
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(0, 100, 64, true, 0, 40),
                 "nothing ready yet");
-        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 100, 64, true),
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 100, 64, true, 0, 40),
                 "keep accumulating while more is still coming and cap not reached");
-        assertEquals(64, CraftJobPolicy.extractBatchRuns(64, 100, 64, true),
+        assertEquals(64, CraftJobPolicy.extractBatchRuns(64, 100, 64, true, 0, 40),
                 "flush once the output slot's cap is reached");
-        assertEquals(20, CraftJobPolicy.extractBatchRuns(20, 20, 64, true),
+        assertEquals(20, CraftJobPolicy.extractBatchRuns(20, 20, 64, true, 0, 40),
                 "flush once every remaining run has been produced, even under cap");
-        assertEquals(5, CraftJobPolicy.extractBatchRuns(5, 100, 64, false),
+        assertEquals(5, CraftJobPolicy.extractBatchRuns(5, 100, 64, false, 0, 40),
                 "input buffer ran dry before the cap: flush what is ready instead of stalling");
-        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 0, 64, true),
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(5, 0, 64, true, 0, 40),
                 "nothing left on the job");
-        assertEquals(1, CraftJobPolicy.extractBatchRuns(1, 100, 1, true),
+        assertEquals(1, CraftJobPolicy.extractBatchRuns(1, 100, 1, true, 0, 40),
                 "non-stackable result caps at one run, same as today's one-at-a-time behaviour");
+    }
+
+    @Test
+    @DisplayName("a job holding output for a consumer is not closed just because its runs ran out")
+    void heldOutputKeepsAJobOpen() {
+        // The 10-alloy-block stall: the third copper producer finished its thirty runs while
+        // one ingot was still held for a momentarily full alloy smelter. Closing there posted
+        // that ingot to a default route and the alloy craft waited on it forever.
+        assertFalse(CraftJobPolicy.mayCloseJob(0, true), "runs done but still holding");
+        assertTrue(CraftJobPolicy.mayCloseJob(0, false), "runs done and nothing held: close it");
+        assertFalse(CraftJobPolicy.mayCloseJob(3, false), "runs left: not finished either way");
+        assertFalse(CraftJobPolicy.mayCloseJob(3, true));
+    }
+
+    @Test
+    @DisplayName("output that is still owed is never spare, however full the consumer is")
+    void owedOutputIsNeverSpare() {
+        // Three copper smelters feeding one alloy smelter. The alloy smelter is full, so the
+        // room check says nothing fits - but the ingots are still owed to it, so none of them
+        // are spare and none may be routed away or dropped. They wait.
+        assertEquals(0, CraftJobPolicy.spareOf(8, 8), "every ingot is claimed");
+        assertEquals(0, CraftJobPolicy.spareOf(8, 64), "more claimed than produced is still none spare");
+
+        // A batch recipe really can overshoot: one log makes four planks when only one is owed.
+        assertEquals(3, CraftJobPolicy.spareOf(4, 1));
+        assertEquals(4, CraftJobPolicy.spareOf(4, 0), "nothing owed, all of it spare");
+    }
+
+    @Test
+    @DisplayName("a crafter's own promise does not count against the room it is shipping into")
+    void roomForIgnoresItsOwnPromise() {
+        // The regression: a wood -> planks -> chest order finished the chest and then never
+        // delivered it. The delivery clamp counted craft-owed output as inbound, so the job
+        // subtracted its own outstanding claim from the destination's free space, decided
+        // nothing fit, refused to extract, and left the chest sitting in the pattern table.
+        assertEquals(1, CraftJobPolicy.roomFor(1, 1, 0),
+                "one slot free and nothing actually travelling: the last item fits");
+
+        // Only things really on their way reduce the room.
+        assertEquals(0, CraftJobPolicy.roomFor(1, 1, 1), "a parcel already flying takes the slot");
+        assertEquals(4, CraftJobPolicy.roomFor(8, 6, 2), "space minus what is en route");
+        assertEquals(8, CraftJobPolicy.roomFor(8, 64, 0), "never more than asked for");
+        assertEquals(0, CraftJobPolicy.roomFor(0, 64, 0), "nothing wanted, nothing offered");
+        assertEquals(0, CraftJobPolicy.roomFor(4, 0, 0), "a full destination takes nothing");
+        assertEquals(0, CraftJobPolicy.roomFor(4, 2, 9), "more en route than space is not negative");
+
+        // The under-report: an alloy smelter holding four ingots has ~60 free. Probed for the
+        // ask plus what is flying, all eight owed ingots fit.
+        assertEquals(8, CraftJobPolicy.roomFor(8, 60, 4), "a nearly empty machine takes the lot");
+        // Probing only the ask would have measured space as 8 and answered 4 - and 0 once
+        // eight were travelling, which is what stalled three smelters onto one.
+        assertEquals(4, CraftJobPolicy.roomFor(8, 8, 4), "what the capped probe used to report");
+    }
+
+    @Test
+    @DisplayName("a machine that is still fed ships what it has once the batch window expires")
+    void extractBatchRunsFlushesOnDeadline() {
+        // A furnace smelting one item at a time: gather keeps its input topped up, so
+        // moreComing never goes false. Without the deadline this waited for the whole order.
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(1, 5, 64, true, 39, 40),
+                "still inside the batch window");
+        assertEquals(1, CraftJobPolicy.extractBatchRuns(1, 5, 64, true, 40, 40),
+                "window expired: ship the one ingot rather than hold it for the other four");
+        assertEquals(3, CraftJobPolicy.extractBatchRuns(3, 5, 64, true, 100, 40),
+                "ships every complete run that is ready, not just one");
+
+        // The deadlock: an order larger than the output slot can hold could never reach
+        // target, and with the input kept fed it had no other way out.
+        assertEquals(64, CraftJobPolicy.extractBatchRuns(64, 66, 64, true, 0, 40),
+                "an order above the slot cap still flushes at the cap");
+        assertEquals(12, CraftJobPolicy.extractBatchRuns(12, 66, 64, true, 40, 40),
+                "and no longer waits for a batch the machine cannot physically hold");
+
+        assertEquals(0, CraftJobPolicy.extractBatchRuns(0, 66, 64, true, 999, 40),
+                "an expired window still ships nothing when nothing is ready");
     }
 
     @Test

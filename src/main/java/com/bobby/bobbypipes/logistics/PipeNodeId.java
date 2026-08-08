@@ -17,6 +17,18 @@ import java.util.Objects;
  */
 public record PipeNodeId(ResourceKey<Level> dimension, BlockPos pos) {
 
+    /**
+     * For save data that has to name a node across dimensions.
+     *
+     * <p>{@link LinkPipeRegistry} keeps its own hand-rolled equivalent so its existing save
+     * format is untouched; new save data should use this.
+     */
+    public static final com.mojang.serialization.Codec<PipeNodeId> CODEC =
+            com.mojang.serialization.codecs.RecordCodecBuilder.create(instance -> instance.group(
+                    Identifier.CODEC.fieldOf("dimension").forGetter(PipeNodeId::dimensionLocation),
+                    BlockPos.CODEC.fieldOf("pos").forGetter(PipeNodeId::pos)
+            ).apply(instance, (dimension, pos) -> new PipeNodeId(dimensionKey(dimension), pos)));
+
     public PipeNodeId {
         Objects.requireNonNull(dimension, "dimension");
         Objects.requireNonNull(pos, "pos");

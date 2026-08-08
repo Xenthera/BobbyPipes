@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ComputerCraft peripheral for the Fluid Request Pipe (no block entity — pos-based).
+ * ComputerCraft peripheral for the Fluid Request Pipe (no block entity - pos-based).
  */
 public final class FluidRequestPipePeripheral implements IPeripheral {
 

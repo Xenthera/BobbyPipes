@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ComputerCraft peripheral for Provider pipes — stock peek only (network owns extracts).
+ * ComputerCraft peripheral for Provider pipes - stock peek only (network owns extracts).
  */
 public final class ProviderPipePeripheral implements IPeripheral {
 

@@ -11,7 +11,7 @@
     {
       "type": "patchouli:text",
       "title": "Ids & style",
-      "text": "$(note)Item / fluid ids$()$(br)Registry names: $(str)minecraft:oak_log$(), $(str)minecraft:water$().$(br2)$(note)Legend$()$(br)$(li)$(method)methodName$() — function$(br)$(li)$(param)param$() — argument$(br)$(li)$(field)field$() — table key$(br)$(li)$(str)\"string\"$() — string literal$(br)$(li)$(type)type$() — type hint"
+      "text": "$(note)Item / fluid ids$()$(br)Registry names: $(str)minecraft:oak_log$(), $(str)minecraft:water$().$(br2)$(note)Legend$()$(br)$(li)$(method)methodName$() - function$(br)$(li)$(param)param$() - argument$(br)$(li)$(field)field$() - table key$(br)$(li)$(str)\"string\"$() - string literal$(br)$(li)$(type)type$() - type hint"
     },
     {
       "type": "patchouli:text",

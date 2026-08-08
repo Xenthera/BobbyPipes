@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ComputerCraft peripheral for Crafting pipes — pattern info and local job status.
+ * ComputerCraft peripheral for Crafting pipes - pattern info and local job status.
  */
 public final class CraftingPipePeripheral implements IPeripheral {
 

@@ -27,8 +27,16 @@ class RequestPlannerTest {
         }
 
         FakeSupply recipe(String crafter, String output, int outputCount, Demand<String>... inputs) {
+            return recipe(crafter, output, outputCount, 0, inputs);
+        }
+
+        /** Same, for a crafter already committed to {@code backlog} runs. */
+        @SafeVarargs
+        final FakeSupply recipe(String crafter, String output, int outputCount, int backlog,
+                                Demand<String>... inputs) {
             recipes.computeIfAbsent(output, key -> new ArrayList<>())
-                    .add(new Craft<>(crafter, new Demand<>(output, outputCount), List.of(inputs)));
+                    .add(new Craft<>(crafter, new Demand<>(output, outputCount),
+                            List.of(inputs), backlog));
             return this;
         }
 
@@ -45,6 +53,24 @@ class RequestPlannerTest {
 
     private static Demand<String> want(String item, int amount) {
         return new Demand<>(item, amount);
+    }
+
+    @Test
+    @DisplayName("work goes to the least loaded crafter first")
+    void leastLoadedCrafterFirst() {
+        // Two crafters for one recipe, one already committed to plenty of runs. An even split
+        // would hand them the same share and leave the busy one further behind; Logistics
+        // Pipes orders crafters by outstanding to-do, so the idle one is offered work first.
+        FakeSupply supply = new FakeSupply()
+                .stock("chest", "log", 64)
+                .recipe("busy", "plank", 1, 40, want("log", 1))
+                .recipe("idle", "plank", 1, 0, want("log", 1));
+
+        RequestPlan<String, String> plan = RequestPlanner.plan(want("plank", 4), supply);
+
+        assertFalse(plan.crafts().isEmpty(), "the plan should craft planks");
+        assertEquals("idle", plan.crafts().getFirst().crafter(),
+                "the idle crafter is offered the first share");
     }
 
     @Test

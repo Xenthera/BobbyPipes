@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ComputerCraft peripheral for the Energy Request Pipe (no block entity — pos-based).
+ * ComputerCraft peripheral for the Energy Request Pipe (no block entity - pos-based).
  */
 public final class EnergyRequestPipePeripheral implements IPeripheral {
 

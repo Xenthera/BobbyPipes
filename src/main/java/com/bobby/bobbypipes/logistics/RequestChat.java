@@ -36,6 +36,11 @@ public final class RequestChat {
     }
 
     public static void fluid(ServerPlayer player, FluidResource fluid, int requestedMb, int shippedMb) {
+        fluid(player, fluid, requestedMb, shippedMb, "");
+    }
+
+    public static void fluid(ServerPlayer player, FluidResource fluid, int requestedMb,
+                             int shippedMb, String failKey) {
         if (fluid.isEmpty() || requestedMb <= 0) {
             return;
         }
@@ -44,17 +49,21 @@ public final class RequestChat {
                 requestedMb,
                 fluid.getFluidType().getDescription());
         line.append(Component.literal(" - "));
-        line.append(result(shippedMb, requestedMb, "", ""));
+        line.append(result(shippedMb, requestedMb, failKey, ""));
         player.sendSystemMessage(line);
     }
 
     public static void energy(ServerPlayer player, int requestedFe, int shippedFe) {
+        energy(player, requestedFe, shippedFe, "");
+    }
+
+    public static void energy(ServerPlayer player, int requestedFe, int shippedFe, String failKey) {
         if (requestedFe <= 0) {
             return;
         }
         MutableComponent line = Component.translatable("chat.bobbypipes.request.energy", requestedFe);
         line.append(Component.literal(" - "));
-        line.append(result(shippedFe, requestedFe, "", ""));
+        line.append(result(shippedFe, requestedFe, failKey, ""));
         player.sendSystemMessage(line);
     }
 

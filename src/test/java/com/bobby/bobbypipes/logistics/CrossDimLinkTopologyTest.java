@@ -8,6 +8,7 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +25,8 @@ class CrossDimLinkTopologyTest {
             ResourceKey.create(Registries.DIMENSION, Identifier.parse("minecraft:overworld"));
     private static final ResourceKey<Level> NETHER =
             ResourceKey.create(Registries.DIMENSION, Identifier.parse("minecraft:the_nether"));
+    private static final ResourceKey<Level> END =
+            ResourceKey.create(Registries.DIMENSION, Identifier.parse("minecraft:the_end"));
 
     @Test
     @DisplayName("cross-dim virtual edge joins corridors across PipeNodeId dimensions")
@@ -46,5 +49,81 @@ class CrossDimLinkTopologyTest {
         Topology<PipeNodeId> transit = DirectCorridors.transitTopology(lattice, smart);
         assertTrue(RoutingSnapshot.of(transit, 1).canReach(smartA, smartB));
         assertEquals(1, transit.neighbours(linkA).get(linkB).intValue());
+    }
+
+    /** Two nodes joined into one bridge snapshot. */
+    private static RoutingSnapshot<PipeNodeId> bridge(PipeNodeId a, PipeNodeId b) {
+        return RoutingSnapshot.of(Topology.<PipeNodeId>builder().link(a, b).build(), 1);
+    }
+
+    @Test
+    @DisplayName("a component grows across a link into the peer dimension")
+    void componentCrossesOneLink() {
+        PipeNodeId over = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(10, 64, 10));
+
+        // The monitor only ever knows its own side; without this the far crafter is
+        // invisible and the network reads as having no crafts on it.
+        Set<PipeNodeId> reached = CrossDimPipeGraph.expandAcrossLinks(
+                Set.of(over), List.of(bridge(over, nether)));
+
+        assertTrue(reached.contains(over));
+        assertTrue(reached.contains(nether), "the far end of the link is on the same network");
+    }
+
+    @Test
+    @DisplayName("chained bridges are followed to a fixpoint, not one hop")
+    void componentFollowsChainedBridges() {
+        PipeNodeId over = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(10, 64, 10));
+        PipeNodeId end = PipeNodeId.of(END, new BlockPos(20, 64, 20));
+
+        // Separate snapshots: reaching the End means noticing the Nether first, which a
+        // single pass over the bridge set would miss depending on iteration order.
+        Set<PipeNodeId> reached = CrossDimPipeGraph.expandAcrossLinks(
+                Set.of(over), List.of(bridge(nether, end), bridge(over, nether)));
+
+        assertTrue(reached.contains(nether));
+        assertTrue(reached.contains(end), "a second link hop is still the same network");
+    }
+
+    @Test
+    @DisplayName("a chain out to another dimension and back is one network")
+    void chainLeavesAndReturns() {
+        // request pipe -> link -> nether run -> link -> crafters, so both ends of the journey
+        // are in the overworld but only connected through the nether.
+        PipeNodeId request = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId outA = PipeNodeId.of(OVERWORLD, new BlockPos(1, 64, 0));
+        PipeNodeId outB = PipeNodeId.of(NETHER, new BlockPos(50, 64, 50));
+        PipeNodeId backA = PipeNodeId.of(NETHER, new BlockPos(54, 64, 50));
+        PipeNodeId backB = PipeNodeId.of(OVERWORLD, new BlockPos(9, 64, 0));
+        PipeNodeId crafter = PipeNodeId.of(OVERWORLD, new BlockPos(10, 64, 0));
+
+        // Two bridges, one per channel. Neither contains both the request pipe and the
+        // crafter, and both of those sit in the same dimension.
+        RoutingSnapshot<PipeNodeId> first = RoutingSnapshot.of(Topology.<PipeNodeId>builder()
+                .link(request, outA).link(outA, outB).link(outB, backA).build(), 1);
+        RoutingSnapshot<PipeNodeId> second = RoutingSnapshot.of(Topology.<PipeNodeId>builder()
+                .link(backA, backB).link(backB, crafter).build(), 1);
+
+        Set<PipeNodeId> reached = CrossDimPipeGraph.expandAcrossLinks(
+                Set.of(request), List.of(first, second));
+
+        assertTrue(reached.contains(outB), "the nether run is on the network");
+        assertTrue(reached.contains(crafter),
+                "and so is the crafter the second link comes back to, in the starting dimension");
+    }
+
+    @Test
+    @DisplayName("an unrelated bridge does not drag its nodes onto this network")
+    void unrelatedBridgeIsIgnored() {
+        PipeNodeId over = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId strangerA = PipeNodeId.of(OVERWORLD, new BlockPos(500, 64, 500));
+        PipeNodeId strangerB = PipeNodeId.of(NETHER, new BlockPos(600, 64, 600));
+
+        Set<PipeNodeId> reached = CrossDimPipeGraph.expandAcrossLinks(
+                Set.of(over), List.of(bridge(strangerA, strangerB)));
+
+        assertEquals(Set.of(over), reached, "someone else's link pair is someone else's network");
     }
 }

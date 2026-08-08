@@ -10,6 +10,7 @@ public final class ClientCraftMonitor {
 
     private static boolean linked;
     private static List<CraftMonitorPayload.Card> cards = List.of();
+    private static List<CraftMonitorPayload.Order> orders = List.of();
 
     private ClientCraftMonitor() {
     }
@@ -17,15 +18,21 @@ public final class ClientCraftMonitor {
     public static void handle(CraftMonitorPayload payload, IPayloadContext context) {
         linked = payload.linked();
         cards = List.copyOf(payload.cards());
+        orders = List.copyOf(payload.orders());
     }
 
     public static void clear() {
         linked = false;
         cards = List.of();
+        orders = List.of();
     }
 
     public static boolean linked() {
         return linked;
+    }
+
+    public static List<CraftMonitorPayload.Order> orders() {
+        return orders;
     }
 
     public static List<CraftMonitorPayload.Card> cards() {

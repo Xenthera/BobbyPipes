@@ -2,6 +2,7 @@ package com.bobby.bobbypipes.request;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -127,11 +128,16 @@ public final class RequestPlanner {
 
             resolving.push(item);
             try {
-                List<Supply.Craft<N, I>> recipes = supply.recipesFor(item);
+                // Least loaded first. Logistics Pipes sorts its crafters by outstanding
+                // to-do before handing out work, so a crafter that is already backed up from
+                // an earlier request is not handed the same share as an idle one. Splitting
+                // evenly regardless of load piles work onto a busy crafter and leaves an idle
+                // one waiting, which then shows up as a request that never quite finishes.
+                List<Supply.Craft<N, I>> recipes = new ArrayList<>(supply.recipesFor(item));
+                recipes.sort(Comparator.comparingInt(Supply.Craft::backlog));
 
-                // Spread the work rather than dumping it all on the first crafter, the way
-                // Logistics Pipes levels load across crafters of equal priority. Each is
-                // offered an even share of what is left; a crafter that cannot take its
+                // Then spread the work rather than dumping it all on the first crafter. Each
+                // is offered an even share of what is left; a crafter that cannot take its
                 // full share leaves more outstanding, so the next one is offered a bigger
                 // share automatically.
                 for (int i = 0; i < recipes.size() && outstanding > 0; i++) {

@@ -16,7 +16,7 @@
     {
       "type": "patchouli:text",
       "title": "setName",
-      "text": "$(method)setName$()($(param)name$())$(br2)Sets a non-blank name. Throws if blank, or if another satellite on this network already uses that name.$(br2)$(note)Returns$()$(br)$(li)$(type)boolean$() — $(kw)true$() on success$(br2)$(note)Example$()$(br)$(code)p.$(method)setName$()($(str)\"furnace_in\"$())$()"
+      "text": "$(method)setName$()($(param)name$())$(br2)Sets a non-blank name. Throws if blank, or if another satellite on this network already uses that name.$(br2)$(note)Returns$()$(br)$(li)$(type)boolean$() - $(kw)true$() on success$(br2)$(note)Example$()$(br)$(code)p.$(method)setName$()($(str)\"furnace_in\"$())$()"
     }
   ]
 }

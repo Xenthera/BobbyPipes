@@ -12,7 +12,7 @@ import net.minecraft.resources.Identifier;
  * Server -> client: status line after a request attempt from the GUI.
  *
  * @param reasonKey    translation key explaining a failure, or empty on success / partial
- * @param reasonDetail optional detail (e.g. source → dest), or empty
+ * @param reasonDetail optional detail (e.g. source -> dest), or empty
  */
 public record RequestResultPayload(int shipped, int requested, int missing, boolean hasPipe,
                                    java.util.List<Shortfall> shortfalls,

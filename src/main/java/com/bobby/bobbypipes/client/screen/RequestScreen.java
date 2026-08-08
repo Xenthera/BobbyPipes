@@ -3,6 +3,7 @@ package com.bobby.bobbypipes.client.screen;
 import com.bobby.bobbypipes.client.ClientRequestGui;
 import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
+import com.bobby.bobbypipes.client.ClientRequestOptions;
 import com.bobby.bobbypipes.network.payload.RequestItemPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
 import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
@@ -76,6 +77,7 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
     private boolean groupCraftable = true;
     private UiButton sortButton;
     private UiButton groupButton;
+    private UiButton partialButton;
     private UiTextBox search;
     private UiTextBox quantity;
     private UiButton requestButton;
@@ -136,7 +138,8 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         int contentRight = leftPos + imageWidth - CONTENT_X;
         int groupX = contentRight - TOOL_BTN_W;
         int sortX = groupX - TOOL_GAP - TOOL_BTN_W;
-        int searchW = sortX - TOOL_GAP - (leftPos + CONTENT_X);
+        int partialX = sortX - TOOL_GAP - TOOL_BTN_W;
+        int searchW = partialX - TOOL_GAP - (leftPos + CONTENT_X);
 
         grid = new StockItemGrid(leftPos + CONTENT_X, topPos + gridY());
 
@@ -150,6 +153,18 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
                 })
                 .build();
         addRenderableWidget(search);
+
+        partialButton = UiButton.builder(partialLabel(), button -> {
+                    ClientRequestOptions.toggleItemAllowPartial();
+                    button.setMessage(BobbyFonts.apply(partialLabel()));
+                    button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                            partialTooltip()));
+                })
+                .bounds(partialX, topPos + ty, TOOL_BTN_W, TOOLBAR_H)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(partialTooltip()))
+                .build()
+                .setTheme(theme);
+        addRenderableWidget(partialButton);
 
         sortButton = UiButton.builder(Component.literal(sortMode.label), button -> {
                     sortMode = sortMode.next();
@@ -200,6 +215,20 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         addRenderableWidget(requestButton);
 
         rebuildFilter();
+    }
+
+    /**
+     * Partial-order toggle face: an approximate sign while a short order may still ship,
+     * an equals sign while only the exact amount will do.
+     */
+    private static Component partialLabel() {
+        return BobbyFonts.literal(ClientRequestOptions.itemAllowPartial() ? "≈" : "=");
+    }
+
+    private static Component partialTooltip() {
+        return Component.translatable(ClientRequestOptions.itemAllowPartial()
+                ? "gui.bobbypipes.request.partial.on"
+                : "gui.bobbypipes.request.partial.off");
     }
 
     /** Shows the shortfall list, or hides it when there is nothing missing. */
@@ -424,8 +453,8 @@ public class RequestScreen extends ThemedContainerScreen<RequestMenu> {
         // not trapped behind the modal.
         closeShortfallModal();
         shortfallShown = false;
-        ClientPacketDistributor.sendToServer(
-                new RequestItemPayload(menu.pos(), selected, amount));
+        ClientPacketDistributor.sendToServer(new RequestItemPayload(
+                menu.pos(), selected, amount, ClientRequestOptions.itemAllowPartial()));
     }
 
     private int parseQuantity() {

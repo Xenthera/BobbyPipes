@@ -23,7 +23,7 @@ import java.util.Set;
 /**
  * Client-side parcel motion cache.
  *
- * <p>Capture (drift → routed) keeps the approach hop into the smart pipe with no cage, then
+ * <p>Capture (drift -> routed) keeps the approach hop into the smart pipe with no cage, then
  * at the centre shows the cage and leaves at progress 0 toward the first outbound pipe
  * snapshotted at capture, never toward wherever the faster server parcel has already
  * reached. If the server is ahead afterward, the client catches up one adjacent pipe at a

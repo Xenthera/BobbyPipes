@@ -189,6 +189,28 @@ public final class DeliveryLedger<N, I> {
         return List.copyOf(settled);
     }
 
+    /** Every open promise, for save data. */
+    public java.util.List<Promise<N, I>> capture() {
+        return java.util.List.copyOf(open.values());
+    }
+
+    /**
+     * Replaces the open promises with {@code loaded}.
+     *
+     * <p>Restored together with the parcels that settle them: a parcel carries its promise id,
+     * so loading one without the other would leave deliveries that can never be closed out.
+     * {@link #nextId} is seeded past every loaded id for the same reason parcels are.
+     */
+    public void restore(java.util.Collection<Promise<N, I>> loaded) {
+        open.clear();
+        long highest = 0L;
+        for (Promise<N, I> promise : loaded) {
+            open.put(promise.id(), promise);
+            highest = Math.max(highest, promise.id());
+        }
+        nextId = Math.max(nextId, highest + 1L);
+    }
+
     public void clear() {
         open.clear();
     }

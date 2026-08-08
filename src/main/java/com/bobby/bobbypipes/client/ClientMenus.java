@@ -4,6 +4,8 @@ import com.bobby.bobbypipes.BobbyPipes;
 import com.bobby.bobbypipes.client.screen.LinkPipeScreen;
 import com.bobby.bobbypipes.client.screen.AutocraftMonitorScreen;
 import com.bobby.bobbypipes.client.screen.BasicPipeScreen;
+import com.bobby.bobbypipes.client.screen.FuelGeneratorScreen;
+import com.bobby.bobbypipes.client.screen.TwerkGeneratorScreen;
 import com.bobby.bobbypipes.client.screen.ChunkLoaderScreen;
 import com.bobby.bobbypipes.client.screen.CraftingPipeScreen;
 import com.bobby.bobbypipes.client.screen.EnergyRequestScreen;
@@ -22,6 +24,7 @@ import com.bobby.bobbypipes.network.payload.EnergyStockPayload;
 import com.bobby.bobbypipes.network.payload.FluidStockPayload;
 import com.bobby.bobbypipes.network.payload.NetworkStockPayload;
 import com.bobby.bobbypipes.network.payload.PatternTableSyncPayload;
+import com.bobby.bobbypipes.network.payload.GeneratorSyncPayload;
 import com.bobby.bobbypipes.network.payload.PowerJunctionSyncPayload;
 import com.bobby.bobbypipes.network.payload.RequestResultPayload;
 import com.bobby.bobbypipes.network.payload.LinkChannelResultPayload;
@@ -58,6 +61,8 @@ public final class ClientMenus {
         event.register(ModMenus.AUTOCRAFT_MONITOR.get(), AutocraftMonitorScreen::new);
         event.register(ModMenus.CHUNK_LOADER.get(), ChunkLoaderScreen::new);
         event.register(ModMenus.POWER_JUNCTION.get(), PowerJunctionScreen::new);
+        event.register(ModMenus.FUEL_GENERATOR.get(), FuelGeneratorScreen::new);
+        event.register(ModMenus.TWERK_GENERATOR.get(), TwerkGeneratorScreen::new);
     }
 
     @SubscribeEvent
@@ -73,6 +78,7 @@ public final class ClientMenus {
         event.register(CraftingPipeSyncPayload.TYPE, CraftingPipeSyncPayload::handle);
         event.register(CraftMonitorPayload.TYPE, ClientCraftMonitor::handle);
         event.register(PowerJunctionSyncPayload.TYPE, PowerJunctionSyncPayload::handle);
+        event.register(GeneratorSyncPayload.TYPE, GeneratorSyncPayload::handle);
     }
 
     @SubscribeEvent

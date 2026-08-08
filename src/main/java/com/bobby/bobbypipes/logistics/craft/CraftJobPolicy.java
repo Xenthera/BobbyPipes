@@ -92,29 +92,102 @@ public final class CraftJobPolicy {
      * exceeds what remains on the job or what the output slot can physically hold before the
      * crafter itself pauses ({@code outputCapRuns}).
      *
-     * <p>{@code moreComing} is the escape hatch: if the input buffer cannot support another
+     * <p>{@code moreComing} is one escape hatch: if the input buffer cannot support another
      * run right now, nothing more is going to appear until the next gather, so waiting any
      * longer would only stall the job for no benefit - take what is ready instead.
+     *
+     * <p>{@code waitedTicks} is the other, and the one that matters for machines. A pattern
+     * table eats a whole run at once, so its input buffer empties and {@code moreComing}
+     * goes false on its own. A furnace eats one item at a time and gather keeps topping it
+     * back up, so that hatch never fires: the job would sit on finished output waiting for a
+     * batch the machine may be physically unable to hold (an order above the output slot's
+     * cap could never reach {@code target} at all, which deadlocked the job outright). After
+     * {@code maxWaitTicks} of accumulating, ship whatever complete runs exist. Fast crafters
+     * still batch - they reach the cap long before the deadline - while a slow machine
+     * streams its output downstream instead of hoarding it.
      *
      * @param availableRuns runs' worth of result already sitting in the crafter
      * @param runsRemaining runs left on the job
      * @param outputCapRuns runs' worth that fit in the output slot before it maxes out
      * @param moreComing    true while the input buffer can still support another run
      *                      without another gather
+     * @param waitedTicks   ticks spent accumulating this batch (since output first appeared)
+     * @param maxWaitTicks  accumulate no longer than this before shipping what is ready
      * @return 0 to keep accumulating; otherwise how many runs to extract now
      */
     public static int extractBatchRuns(int availableRuns,
                                        int runsRemaining,
                                        int outputCapRuns,
-                                       boolean moreComing) {
+                                       boolean moreComing,
+                                       long waitedTicks,
+                                       long maxWaitTicks) {
         if (availableRuns <= 0 || runsRemaining <= 0) {
             return 0;
         }
         int target = Math.max(1, Math.min(runsRemaining, outputCapRuns));
-        if (availableRuns >= target || !moreComing) {
+        if (availableRuns >= target || !moreComing || waitedTicks >= maxWaitTicks) {
             return Math.min(availableRuns, runsRemaining);
         }
         return 0;
+    }
+
+    /**
+     * How much more of an item a destination can take, for a crafter deciding what to ship.
+     *
+     * <p>{@code enRoute} counts only what is physically on its way - queued withdrawals and
+     * flying parcels. It must <em>not</em> include output a craft job has promised but not yet
+     * extracted. Counting that made a job subtract its own outstanding promise from the room it
+     * was checking, so the last delivery could never fit: it refused to ship the very thing it
+     * owed, the extract was clamped to nothing, and the finished item sat in the machine.
+     *
+     * <p>The gather side is the opposite case and deliberately still counts craft-owed output
+     * ({@link #inbound(int, int, int)}), because there an upstream promise really does mean
+     * "more is coming, do not order it from stock as well".
+     */
+    /**
+     * <p>{@code space} must be measured against {@code want + enRoute}, not {@code want}. A
+     * capacity probe returns at most what it is asked for, so measuring only {@code want} and
+     * then subtracting {@code enRoute} reports no room as soon as anything is travelling, on a
+     * machine that may be almost empty.
+     */
+    public static int roomFor(int want, int space, int enRoute) {
+        if (want <= 0) {
+            return 0;
+        }
+        return Math.max(0, Math.min(want, Math.max(0, space) - Math.max(0, enRoute)));
+    }
+
+    /**
+     * Whether a job that has run out of runs may be closed.
+     *
+     * <p>Not while it is still holding output. Closing a job hands whatever it holds to the
+     * end-of-job release, which routes to the nearest default route - so the last item of a
+     * batch ends up in a chest and the consumer waits forever for a delivery that was given
+     * away. Ten blocks of alloy stalled on exactly this: two producers delivered thirty
+     * ingots each, the third delivered twenty-nine and posted the thirtieth to a default
+     * route as it closed.
+     *
+     * @param runsRemaining  runs left to craft
+     * @param holdingOutput  true while output extracted for a consumer has nowhere to go yet
+     */
+    public static boolean mayCloseJob(int runsRemaining, boolean holdingOutput) {
+        return runsRemaining <= 0 && !holdingOutput;
+    }
+
+    /**
+     * How much of a finished batch is genuinely spare.
+     *
+     * <p>Output covered by an outstanding claim is never spare, no matter how full that
+     * consumer is at this instant. Treating "the consumer has no room right now" as "nobody
+     * wants this" is what sent owed copper ingots to a default route, and to the floor when
+     * there was no route: three smelters feeding one alloy smelter each found it full and
+     * drained themselves rather than waiting.
+     *
+     * @param produced how much came out of the machine
+     * @param claimed  still owed to downstream crafters and to the requester
+     */
+    public static int spareOf(int produced, int claimed) {
+        return Math.max(0, Math.max(0, produced) - Math.max(0, claimed));
     }
 
     /**

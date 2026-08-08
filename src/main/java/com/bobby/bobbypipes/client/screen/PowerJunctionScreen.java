@@ -258,7 +258,7 @@ public class PowerJunctionScreen extends ThemedContainerScreen<PowerJunctionMenu
         }
     }
 
-    /** Bresenham on 1x1 fills — {@code graphics} has no line primitive. */
+    /** Bresenham on 1x1 fills - {@code graphics} has no line primitive. */
     private static void drawLine(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1, int color) {
         int dx = Math.abs(x1 - x0);
         int dy = -Math.abs(y1 - y0);

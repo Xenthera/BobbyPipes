@@ -17,8 +17,11 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Client -> server: submit a request from the energy request pipe screen.
+ *
+ * @param allowPartial when false, send nothing unless the whole amount can be supplied
  */
-public record RequestEnergyPayload(BlockPos pos, int amountFe) implements CustomPacketPayload {
+public record RequestEnergyPayload(BlockPos pos, int amountFe, boolean allowPartial)
+        implements CustomPacketPayload {
 
     public static final Type<RequestEnergyPayload> TYPE =
             new Type<>(Identifier.fromNamespaceAndPath(BobbyPipes.MOD_ID, "request_energy"));
@@ -27,6 +30,7 @@ public record RequestEnergyPayload(BlockPos pos, int amountFe) implements Custom
             StreamCodec.composite(
                     BlockPos.STREAM_CODEC, RequestEnergyPayload::pos,
                     ByteBufCodecs.VAR_INT, RequestEnergyPayload::amountFe,
+                    ByteBufCodecs.BOOL, RequestEnergyPayload::allowPartial,
                     RequestEnergyPayload::new);
 
     @Override
@@ -50,8 +54,12 @@ public record RequestEnergyPayload(BlockPos pos, int amountFe) implements Custom
             PipeNetwork network = PipeNetwork.get(player.level());
             network.rebuildNow(payload.pos());
             int shipped = EnergyRequestService.request(
-                    player.level(), network, payload.pos(), payload.amountFe());
-            RequestChat.energy(player, payload.amountFe(), shipped);
+                    player.level(), network, payload.pos(), payload.amountFe(),
+                    true, payload.allowPartial());
+            // Only meaningful when nothing shipped; RequestChat ignores it otherwise.
+            String failKey = payload.allowPartial()
+                    ? "" : "chat.bobbypipes.request.fail.incomplete.amount";
+            RequestChat.energy(player, payload.amountFe(), shipped, failKey);
             EnergyRequestMenus.syncStock(player, payload.pos());
         });
     }

@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.Block;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,6 +31,53 @@ public final class CrossDimPipeGraph {
     private static final Map<Integer, RoutingSnapshot<PipeNodeId>> BRIDGES =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    /**
+     * The two link mouths each bridge was built around.
+     *
+     * <p>A bridge only spans one channel, so a route that crosses two links - overworld to
+     * nether and back again - is not inside any single one. These are the joining points a
+     * chained route is searched over: reach one channel's mouth, then continue on the bridge
+     * that shares it.
+     */
+    private static final Map<Integer, PipeNodeId[]> BRIDGE_MOUTHS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Memoised {@link #nextHop} answers, thrown away whenever a bridge changes.
+     *
+     * <p>The chained search walks bridge by bridge, and its callers ask the same questions
+     * relentlessly: staging a single parcel resolves a hop per node along the route, and every
+     * craft job re-checks whether its endpoints are still connected on every tick. Recomputing
+     * that per call made a fifty job order through two wormholes unplayable.
+     */
+    private static final Map<RouteKey, java.util.Optional<PipeNodeId>> HOP_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Bumped on any bridge mutation; the cache is dropped when it moves. */
+    private static final java.util.concurrent.atomic.AtomicLong REVISION =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong CACHE_REVISION =
+            new java.util.concurrent.atomic.AtomicLong(-1L);
+
+    /** Bound so a pathological network cannot grow the cache without limit. */
+    private static final int MAX_CACHED_ROUTES = 20_000;
+
+    private record RouteKey(PipeNodeId from, PipeNodeId to) {
+    }
+
+    /** Called whenever the bridge set changes, so stale routes are never served. */
+    private static void invalidateRoutes() {
+        REVISION.incrementAndGet();
+    }
+
+    private static Map<RouteKey, java.util.Optional<PipeNodeId>> routeCache() {
+        long current = REVISION.get();
+        if (CACHE_REVISION.getAndSet(current) != current || HOP_CACHE.size() > MAX_CACHED_ROUTES) {
+            HOP_CACHE.clear();
+        }
+        return HOP_CACHE;
+    }
+
     private CrossDimPipeGraph() {
     }
 
@@ -45,6 +93,7 @@ public final class CrossDimPipeGraph {
         for (LinkPipeRegistry.PipePair pair : registry.completePairs()) {
             if (pair.a().sameDimension(pair.b())) {
                 BRIDGES.remove(pair.channel());
+                BRIDGE_MOUTHS.remove(pair.channel());
                 continue;
             }
             boolean touches = pair.a().dimension().equals(level.dimension())
@@ -53,15 +102,19 @@ public final class CrossDimPipeGraph {
                 continue;
             }
             touched.add(pair.channel());
-            if (!LinkPipeRegistry.bothLoaded(level.getServer(), pair.a(), pair.b())) {
+            if (!LinkPipeRegistry.bothLoaded(pair.a(), pair.b())) {
                 BRIDGES.remove(pair.channel());
+                BRIDGE_MOUTHS.remove(pair.channel());
                 continue;
             }
             BRIDGES.put(pair.channel(), buildBridge(level, pair, localLattice, localSmart));
+            BRIDGE_MOUTHS.put(pair.channel(), new PipeNodeId[] {pair.a(), pair.b()});
         }
         // Drop stale channels that no longer exist.
         BRIDGES.keySet().removeIf(channel -> registry.completePairs().stream()
                 .noneMatch(p -> p.channel() == channel && !p.a().sameDimension(p.b())));
+        BRIDGE_MOUTHS.keySet().retainAll(BRIDGES.keySet());
+        invalidateRoutes();
     }
 
     private static RoutingSnapshot<PipeNodeId> buildBridge(ServerLevel level,
@@ -141,7 +194,7 @@ public final class CrossDimPipeGraph {
             if (!pair.a().dimension().equals(level.dimension())) {
                 continue;
             }
-            if (!LinkPipeRegistry.bothLoaded(level.getServer(), pair.a(), pair.b())) {
+            if (!LinkPipeRegistry.bothLoaded(pair.a(), pair.b())) {
                 continue;
             }
             builder.node(pair.a());
@@ -181,6 +234,8 @@ public final class CrossDimPipeGraph {
     /** Drops a cached bridge so the next rebuild can recreate it only if both ends load. */
     public static void dropChannel(int channel) {
         BRIDGES.remove(channel);
+        BRIDGE_MOUTHS.remove(channel);
+        invalidateRoutes();
     }
 
     /** Every live cross-dim bridge. */
@@ -188,26 +243,136 @@ public final class CrossDimPipeGraph {
         return BRIDGES.values();
     }
 
+    /**
+     * Grows {@code localComponent} to include everything reachable through live cross-dim
+     * bridges, in any dimension.
+     *
+     * <p>Anything asking "what is on my network" has to do this, because a component is only
+     * ever solved per level: the Autocraft Monitor two chunks from a link pipe is on the same
+     * logical network as the crafter on the far side, and answering from the local routing
+     * snapshot alone reports that network as empty.
+     *
+     * <p>Iterates to a fixpoint rather than taking one pass, since bridges chain: A-B and B-C
+     * are separate snapshots, and reaching C from A means noticing B first.
+     *
+     * @param localComponent nodes already known to be on the network, in any dimension
+     * @return {@code localComponent} plus every node any live bridge can reach from it
+     */
+    public static Set<PipeNodeId> expandAcrossLinks(Set<PipeNodeId> localComponent) {
+        return expandAcrossLinks(localComponent, BRIDGES.values());
+    }
+
+    /** Testable form: same walk over an explicit bridge set. */
+    static Set<PipeNodeId> expandAcrossLinks(Set<PipeNodeId> localComponent,
+                                             java.util.Collection<RoutingSnapshot<PipeNodeId>> bridges) {
+        if (localComponent.isEmpty() || bridges.isEmpty()) {
+            return Set.copyOf(localComponent);
+        }
+        Set<PipeNodeId> reached = new java.util.LinkedHashSet<>(localComponent);
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (RoutingSnapshot<PipeNodeId> bridge : bridges) {
+                for (PipeNodeId known : List.copyOf(reached)) {
+                    if (!bridge.contains(known)) {
+                        continue;
+                    }
+                    // contains() is not enough: a bridge topology can hold isolated nodes
+                    // that share no path with this one.
+                    for (PipeNodeId node : bridge.nodes()) {
+                        if (!reached.contains(node) && bridge.canReach(known, node)) {
+                            reached.add(node);
+                            grew = true;
+                        }
+                    }
+                }
+            }
+        }
+        return reached;
+    }
+
     public static void clear() {
         BRIDGES.clear();
+        BRIDGE_MOUTHS.clear();
+        invalidateRoutes();
     }
 
     /**
      * Next hop from {@code from} toward {@code to} across any live cross-dim bridge.
      * Empty when no bridge can actually reach both ends.
      *
-     * <p>A bridge topology may {@code contain} isolated smart nodes that share no path —
+     * <p>A bridge topology may {@code contain} isolated smart nodes that share no path -
      * catalog uses {@code canReach}, so commit must too. Trying the first bridge that
      * merely contains both endpoints used to return empty and skip later bridges that
      * did have a route.
      */
     public static java.util.Optional<PipeNodeId> nextHop(PipeNodeId from, PipeNodeId to) {
-        if (from.sameDimension(to)) {
+        if (from.equals(to)) {
             return java.util.Optional.empty();
         }
+        return routeCache().computeIfAbsent(new RouteKey(from, to),
+                key -> solveNextHop(key.from(), key.to()));
+    }
+
+    private static java.util.Optional<PipeNodeId> solveNextHop(PipeNodeId from, PipeNodeId to) {
+        // One bridge spanning both ends is the common case.
         for (RoutingSnapshot<PipeNodeId> bridge : BRIDGES.values()) {
             if (bridge.canReach(from, to)) {
                 return bridge.nextHop(from, to);
+            }
+        }
+        return chainedNextHop(from, to);
+    }
+
+    /**
+     * First hop of a route that has to cross more than one link.
+     *
+     * <p>Overworld to the nether and back again is two channels, so no single bridge holds
+     * both ends - and because the journey starts and finishes in the same dimension, the old
+     * same-dimension short circuit refused it outright. Searches mouth to mouth instead:
+     * reach one channel's link, then continue on whichever bridge shares it.
+     *
+     * <p>Breadth first, so the fewest links wins. Bridges are one per interdimensional
+     * channel, so the search space is the number of link pairs, not the number of pipes.
+     */
+    private static java.util.Optional<PipeNodeId> chainedNextHop(PipeNodeId from, PipeNodeId to) {
+        if (BRIDGES.size() < 2) {
+            return java.util.Optional.empty();
+        }
+        // Node reached -> the very first hop taken out of `from` to get there.
+        Map<PipeNodeId, PipeNodeId> firstHop = new java.util.HashMap<>();
+        Deque<PipeNodeId> queue = new ArrayDeque<>();
+        queue.add(from);
+        Set<PipeNodeId> seen = new HashSet<>();
+        seen.add(from);
+
+        while (!queue.isEmpty()) {
+            PipeNodeId at = queue.removeFirst();
+            for (Map.Entry<Integer, RoutingSnapshot<PipeNodeId>> entry : BRIDGES.entrySet()) {
+                RoutingSnapshot<PipeNodeId> bridge = entry.getValue();
+                if (!bridge.contains(at)) {
+                    continue;
+                }
+                if (bridge.canReach(at, to)) {
+                    return java.util.Optional.ofNullable(
+                            at.equals(from) ? bridge.nextHop(at, to).orElse(null) : firstHop.get(at));
+                }
+                for (PipeNodeId[] mouths : BRIDGE_MOUTHS.values()) {
+                    for (PipeNodeId mouth : mouths) {
+                        if (seen.contains(mouth) || !bridge.canReach(at, mouth)) {
+                            continue;
+                        }
+                        PipeNodeId hop = at.equals(from)
+                                ? bridge.nextHop(at, mouth).orElse(null)
+                                : firstHop.get(at);
+                        if (hop == null) {
+                            continue;
+                        }
+                        seen.add(mouth);
+                        firstHop.put(mouth, hop);
+                        queue.addLast(mouth);
+                    }
+                }
             }
         }
         return java.util.Optional.empty();

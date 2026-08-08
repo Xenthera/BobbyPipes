@@ -26,15 +26,24 @@ public final class LinkTransit {
             return Optional.empty();
         }
         if (from.sameDimension(to) && from.dimension().equals(level.dimension())) {
-            return local.nextHop(from.pos(), to.pos()).map(pos -> PipeNodeId.of(level, pos));
+            Optional<PipeNodeId> localHop =
+                    local.nextHop(from.pos(), to.pos()).map(pos -> PipeNodeId.of(level, pos));
+            if (localHop.isPresent()) {
+                return localHop;
+            }
+            // Same dimension, different local component: the route may still exist by way of
+            // a link out to another world and back.
+            return CrossDimPipeGraph.nextHop(from, to);
         }
         if (from.sameDimension(to)) {
             ServerLevel other = LinkPipeRegistry.levelOf(level.getServer(), from);
             if (other == null) {
                 return Optional.empty();
             }
-            return PipeNetwork.get(other).routes().nextHop(from.pos(), to.pos())
-                    .map(pos -> PipeNodeId.of(other, pos));
+            Optional<PipeNodeId> remoteHop =
+                    PipeNetwork.get(other).routes().nextHop(from.pos(), to.pos())
+                            .map(pos -> PipeNodeId.of(other, pos));
+            return remoteHop.isPresent() ? remoteHop : CrossDimPipeGraph.nextHop(from, to);
         }
         return CrossDimPipeGraph.nextHop(from, to);
     }
@@ -66,7 +75,7 @@ public final class LinkTransit {
             if (!peer.pos().equals(next)) {
                 return Optional.empty();
             }
-            if (!LinkPipeRegistry.bothLoaded(server, atId, peer)) {
+            if (!LinkPipeRegistry.bothLoaded(atId, peer)) {
                 return Optional.empty();
             }
             return Optional.of(peer);

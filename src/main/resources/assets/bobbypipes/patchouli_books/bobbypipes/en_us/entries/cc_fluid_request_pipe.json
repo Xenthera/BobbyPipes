@@ -11,12 +11,12 @@
     {
       "type": "patchouli:text",
       "title": "getAvailable",
-      "text": "$(method)getAvailable()$()$(br2)Free fluids visible from this request pipe.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() — fluid id$(li)$(field)count$() $(type)number$() — millibuckets$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)getAvailable()$()$()"
+      "text": "$(method)getAvailable()$()$(br2)Free fluids visible from this request pipe.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() - fluid id$(li)$(field)count$() $(type)number$() - millibuckets$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)getAvailable()$()$()"
     },
     {
       "type": "patchouli:text",
       "title": "getFluidCount",
-      "text": "$(method)getFluidCount$()($(param)fluidId$())$(br2)Free millibuckets of one fluid.$(br2)$(note)Returns$()$(br)$(li)$(type)number$() — mB, or $(code)0$()$(br2)$(note)Example$()$(br)$(code)p.$(method)getFluidCount$()($(str)\"minecraft:water\"$())$()"
+      "text": "$(method)getFluidCount$()($(param)fluidId$())$(br2)Free millibuckets of one fluid.$(br2)$(note)Returns$()$(br)$(li)$(type)number$() - mB, or $(code)0$()$(br2)$(note)Example$()$(br)$(code)p.$(method)getFluidCount$()($(str)\"minecraft:water\"$())$()"
     },
     {
       "type": "patchouli:text",
@@ -26,7 +26,7 @@
     {
       "type": "patchouli:text",
       "title": "canRequest",
-      "text": "$(method)canRequest$()($(param)fluidId$(), $(param)amountMb$())$(br2)Checks free stock only — does not commit.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() — mB shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(str)\"minecraft:water\"$(), $(code)8000$())$()"
+      "text": "$(method)canRequest$()($(param)fluidId$(), $(param)amountMb$())$(br2)Checks free stock only - does not commit.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() - mB shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(str)\"minecraft:water\"$(), $(code)8000$())$()"
     }
   ]
 }

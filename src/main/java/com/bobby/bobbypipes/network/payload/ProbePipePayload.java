@@ -15,7 +15,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * Client → server: ask for live status of the pipe under the crosshair (Pipe Goggles).
+ * Client -> server: ask for live status of the pipe under the crosshair (Pipe Goggles).
  */
 public record ProbePipePayload(BlockPos pos) implements CustomPacketPayload {
 

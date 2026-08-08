@@ -50,10 +50,20 @@ public interface Supply<N, I> {
      * @param crafter the node that would run it
      * @param output  what one run produces
      * @param inputs  what one run consumes
+     * @param backlog runs this crafter is already committed to from earlier requests. The
+     *                planner hands work to the least loaded crafter first, the way Logistics
+     *                Pipes orders its crafters by outstanding to-do rather than splitting
+     *                evenly and ignoring who is already busy.
      */
-    record Craft<N, I>(N crafter, Demand<I> output, List<Demand<I>> inputs) {
+    record Craft<N, I>(N crafter, Demand<I> output, List<Demand<I>> inputs, int backlog) {
         public Craft {
             inputs = List.copyOf(inputs);
+            backlog = Math.max(0, backlog);
+        }
+
+        /** An idle crafter, for fixtures and for callers with no workload to report. */
+        public Craft(N crafter, Demand<I> output, List<Demand<I>> inputs) {
+            this(crafter, output, inputs, 0);
         }
     }
 }

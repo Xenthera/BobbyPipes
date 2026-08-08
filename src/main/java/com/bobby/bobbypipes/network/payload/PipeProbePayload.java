@@ -11,7 +11,7 @@ import net.minecraft.resources.Identifier;
 import java.util.List;
 
 /**
- * Server → client: status lines for the pipe currently under the goggles crosshair.
+ * Server -> client: status lines for the pipe currently under the goggles crosshair.
  */
 public record PipeProbePayload(BlockPos pos, List<String> lines) implements CustomPacketPayload {
 

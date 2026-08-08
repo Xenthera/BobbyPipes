@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "bobbypipes:block/fuel_generator_top",
+    "bottom": "bobbypipes:block/fuel_generator_bottom",
+    "side": "bobbypipes:block/fuel_generator_side",
+    "front": "bobbypipes:block/fuel_generator_front"
+  }
+}

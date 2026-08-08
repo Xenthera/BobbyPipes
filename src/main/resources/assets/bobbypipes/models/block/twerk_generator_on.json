@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "bobbypipes:block/twerk_generator_top",
+    "bottom": "bobbypipes:block/twerk_generator_bottom",
+    "side": "bobbypipes:block/twerk_generator_side",
+    "front": "bobbypipes:block/twerk_generator_front_on"
+  }
+}

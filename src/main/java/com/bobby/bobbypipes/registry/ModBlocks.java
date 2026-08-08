@@ -12,6 +12,7 @@ import com.bobby.bobbypipes.block.EnergySupplierPipeBlock;
 import com.bobby.bobbypipes.block.FluidProviderPipeBlock;
 import com.bobby.bobbypipes.block.FluidRequestPipeBlock;
 import com.bobby.bobbypipes.block.FluidSupplierPipeBlock;
+import com.bobby.bobbypipes.block.FuelGeneratorBlock;
 import com.bobby.bobbypipes.block.PassiveSupplierPipeBlock;
 import com.bobby.bobbypipes.block.PatternTableBlock;
 import com.bobby.bobbypipes.block.PipeBlock;
@@ -20,6 +21,7 @@ import com.bobby.bobbypipes.block.ProviderPipeBlock;
 import com.bobby.bobbypipes.block.RequestPipeBlock;
 import com.bobby.bobbypipes.block.SatellitePipeBlock;
 import com.bobby.bobbypipes.block.SupplierPipeBlock;
+import com.bobby.bobbypipes.block.TwerkGeneratorBlock;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -168,6 +170,20 @@ public final class ModBlocks {
             registerWithItem("power_junction", props -> new PowerJunctionBlock(props
                     .strength(2.5f)
                     .sound(SoundType.METAL)));
+
+    /** Burns furnace fuel into FE so a fresh network has something to run on. */
+    public static final DeferredBlock<FuelGeneratorBlock> FUEL_GENERATOR =
+            registerWithItem("fuel_generator", props -> new FuelGeneratorBlock(props
+                    .strength(2.5f)
+                    .sound(SoundType.METAL)
+                    .lightLevel(state -> state.getValue(FuelGeneratorBlock.LIT) ? 13 : 0)));
+
+    /** Turns nearby crouching into FE. Renewable, if undignified. */
+    public static final DeferredBlock<TwerkGeneratorBlock> TWERK_GENERATOR =
+            registerWithItem("twerk_generator", props -> new TwerkGeneratorBlock(props
+                    .strength(2.5f)
+                    .sound(SoundType.METAL)
+                    .lightLevel(state -> state.getValue(TwerkGeneratorBlock.LIT) ? 8 : 0)));
 
     private ModBlocks() {
     }

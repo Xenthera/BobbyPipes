@@ -11,7 +11,7 @@
     {
       "type": "patchouli:text",
       "title": "getAvailable",
-      "text": "$(method)getAvailable()$()$(br2)Approximate FE the network can currently supply toward this pipe (queued withdrawals already subtracted).$(br2)$(note)Returns$()$(br)$(li)$(type)number$() — FE available$(br2)$(note)Example$()$(br)$(code)$(kw)local$() fe = p.$(method)getAvailable()$()$()"
+      "text": "$(method)getAvailable()$()$(br2)Approximate FE the network can currently supply toward this pipe (queued withdrawals already subtracted).$(br2)$(note)Returns$()$(br)$(li)$(type)number$() - FE available$(br2)$(note)Example$()$(br)$(code)$(kw)local$() fe = p.$(method)getAvailable()$()$()"
     },
     {
       "type": "patchouli:text",
@@ -21,7 +21,7 @@
     {
       "type": "patchouli:text",
       "title": "canRequest",
-      "text": "$(method)canRequest$()($(param)amountFe$())$(br2)Compares the ask to current network supply.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() — FE shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(code)50000$())$()"
+      "text": "$(method)canRequest$()($(param)amountFe$())$(br2)Compares the ask to current network supply.$(br2)$(note)Returns$()$(br)$(li)$(field)satisfiable$() $(type)boolean$()$(li)$(field)missing$() $(type)number?$() - FE shortfall$(br2)$(note)Example$()$(br)$(code)p.$(method)canRequest$()($(code)50000$())$()"
     }
   ]
 }

@@ -11,12 +11,12 @@
     {
       "type": "patchouli:text",
       "title": "getChannel / setChannel",
-      "text": "$(method)getChannel()$()$(br)$(method)setChannel$()($(param)id$())$(br2)$(method)getChannel()$() — current channel ($(code)0$() = unpaired).$(br2)$(method)setChannel$()($(param)id$()) — claim a channel, or $(code)0$() to release. Throws if the channel already has two other endpoints.$(br2)$(note)Example$()$(br)$(code)p.$(method)setChannel$()($(code)42$())$()"
+      "text": "$(method)getChannel()$()$(br)$(method)setChannel$()($(param)id$())$(br2)$(method)getChannel()$() - current channel ($(code)0$() = unpaired).$(br2)$(method)setChannel$()($(param)id$()) - claim a channel, or $(code)0$() to release. Throws if the channel already has two other endpoints.$(br2)$(note)Example$()$(br)$(code)p.$(method)setChannel$()($(code)42$())$()"
     },
     {
       "type": "patchouli:text",
       "title": "getStatus",
-      "text": "$(method)getStatus()$()$(br2)Pairing / link state as a short string.$(br2)$(note)Returns$()$(br)$(li)$(type)string$() — $(str)idle$(), $(str)waiting$(), $(str)linked$(), or $(str)severed$()$(br2)$(note)Example$()$(br)$(code)$(kw)print$()(p.$(method)getStatus()$())$()"
+      "text": "$(method)getStatus()$()$(br2)Pairing / link state as a short string.$(br2)$(note)Returns$()$(br)$(li)$(type)string$() - $(str)idle$(), $(str)waiting$(), $(str)linked$(), or $(str)severed$()$(br2)$(note)Example$()$(br)$(code)$(kw)print$()(p.$(method)getStatus()$())$()"
     },
     {
       "type": "patchouli:text",

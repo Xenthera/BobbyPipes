@@ -54,6 +54,12 @@ public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
     private final ProviderSendQueue sendQueue;
     /** Storage identities the requester must not pull from (e.g. a Supplier's own chest). */
     private final Set<Object> excludedStores;
+    /**
+     * Resolved once per instance. A supply object lives for one request, but the planner asks
+     * it for stock and recipes many times over while it walks the craft tree, and every one of
+     * those was re-walking the routing table and re-expanding the link graph.
+     */
+    private List<PipeNodeId> providerNodes;
 
     public NetworkSupply(ServerLevel level,
                          RoutingSnapshot<BlockPos> routes,
@@ -149,7 +155,10 @@ public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
             crafts.add(new Craft<>(
                     pipe,
                     new Demand<>(item, Math.max(1, output.getCount())),
-                    inputs));
+                    inputs,
+                    // What this crafter is already committed to, so planning can favour the
+                    // idle ones instead of splitting evenly across busy and idle alike.
+                    pipeNetwork.craftJobs().outstandingRunsAt(pipe)));
         }
         return crafts;
     }
@@ -242,6 +251,9 @@ public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
      * dimension are not dropped.
      */
     private List<PipeNodeId> providerNodesByDistance() {
+        if (providerNodes != null) {
+            return providerNodes;
+        }
         List<PipeNodeId> ordered = routes.routesFrom(requester.pos())
                 .map(table -> {
                     List<PipeNodeId> list = new ArrayList<>();
@@ -255,21 +267,17 @@ public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
                         ? new ArrayList<>(List.of(requester))
                         : new ArrayList<>());
         Set<PipeNodeId> seen = new HashSet<>(ordered);
-        for (RoutingSnapshot<PipeNodeId> bridge : CrossDimPipeGraph.bridges()) {
-            if (!bridge.contains(requester)) {
-                continue;
-            }
-            for (PipeNodeId node : bridge.topology().nodes()) {
-                if (node.sameDimension(requester)) {
-                    continue;
-                }
-                if (seen.contains(node) || !bridge.canReach(requester, node)) {
-                    continue;
-                }
+        // Everything the links can reach, following chains rather than a single bridge, and
+        // without filtering by dimension. A run that leaves the overworld, crosses the nether
+        // and comes back lands on nodes that share the requester's dimension but are not in
+        // its local routing table - the old same-dimension skip dropped exactly those, and
+        // only consulting bridges containing the requester missed the second hop entirely.
+        for (PipeNodeId node : CrossDimPipeGraph.expandAcrossLinks(seen)) {
+            if (seen.add(node)) {
                 ordered.add(node);
-                seen.add(node);
             }
         }
+        providerNodes = ordered;
         return ordered;
     }
 
@@ -281,16 +289,32 @@ public final class NetworkSupply implements Supply<PipeNodeId, ItemResource> {
     }
 
     private boolean isProvider(PipeNodeId pipe) {
+        // levelOf already refuses unloaded chunks, so this read cannot force a load.
         ServerLevel pipeLevel = levelOf(pipe);
         return pipeLevel != null
-                && pipeLevel.hasChunkAt(pipe.pos())
                 && pipeLevel.getBlockState(pipe.pos()).getBlock() instanceof ProviderPipeBlock;
     }
 
+    /**
+     * The level a provider/crafter sits in, or null when its chunk is not loaded.
+     *
+     * <p>The chunk check is the point. Reading a block state or block entity in an unloaded
+     * chunk does not report absence - it loads the chunk synchronously. Supplier restock
+     * scans every second, so an unguarded read here force-loaded a link pipe's peer chunk on
+     * a one-second cycle: the chunk churned in and out, the peer's LIVE/SEVERED status
+     * churned with it, and a request that landed inside one of those windows really could
+     * pull from a chunk that was otherwise unloaded.
+     *
+     * <p>Applies to same-dimension nodes too - a far-away pipe in this level is just as
+     * capable of being unloaded as one across a link.
+     */
     private ServerLevel levelOf(PipeNodeId pipe) {
-        if (pipe.sameDimension(requester)) {
-            return level;
+        ServerLevel pipeLevel = pipe.sameDimension(requester)
+                ? level
+                : LinkPipeRegistry.levelOf(level.getServer(), pipe);
+        if (pipeLevel == null || !pipeLevel.hasChunkAt(pipe.pos())) {
+            return null;
         }
-        return LinkPipeRegistry.levelOf(level.getServer(), pipe);
+        return pipeLevel;
     }
 }

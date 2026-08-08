@@ -17,8 +17,13 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
 
 /**
  * Client -> server: submit a request from the request pipe screen.
+ *
+ * @param allowPartial when false, ship nothing unless the whole quantity can be sourced,
+ *                     so the screen reports what the full order is short of instead of
+ *                     dispatching a fraction of it
  */
-public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity)
+public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity,
+                                 boolean allowPartial)
         implements CustomPacketPayload {
 
     public static final Type<RequestItemPayload> TYPE =
@@ -29,6 +34,7 @@ public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity)
                     BlockPos.STREAM_CODEC, RequestItemPayload::pos,
                     ItemResource.STREAM_CODEC, RequestItemPayload::item,
                     ByteBufCodecs.VAR_INT, RequestItemPayload::quantity,
+                    ByteBufCodecs.BOOL, RequestItemPayload::allowPartial,
                     RequestItemPayload::new);
 
     @Override
@@ -50,7 +56,8 @@ public record RequestItemPayload(BlockPos pos, ItemResource item, int quantity)
             }
 
             RequestService.Outcome outcome = RequestService.requestWhatYouCan(
-                    player.level(), payload.pos(), payload.item(), payload.quantity());
+                    player.level(), payload.pos(), payload.item(), payload.quantity(),
+                    java.util.Set.of(), true, payload.allowPartial());
             int shipped = outcome.commitment() == null ? 0 : outcome.commitment().shipped();
             String failKey = outcome.commitment() == null ? "chat.bobbypipes.request.fail.no_pipe"
                     : outcome.commitment().failKey();

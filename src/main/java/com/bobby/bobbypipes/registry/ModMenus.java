@@ -11,7 +11,9 @@ import com.bobby.bobbypipes.menu.EnergySupplierPipeMenu;
 import com.bobby.bobbypipes.menu.FluidRequestMenu;
 import com.bobby.bobbypipes.menu.FluidSupplierPipeMenu;
 import com.bobby.bobbypipes.menu.PatternTableMenu;
+import com.bobby.bobbypipes.menu.FuelGeneratorMenu;
 import com.bobby.bobbypipes.menu.PowerJunctionMenu;
+import com.bobby.bobbypipes.menu.TwerkGeneratorMenu;
 import com.bobby.bobbypipes.menu.ProviderPipeMenu;
 import com.bobby.bobbypipes.menu.RequestMenu;
 import com.bobby.bobbypipes.menu.SatellitePipeMenu;
@@ -72,6 +74,12 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<PowerJunctionMenu>> POWER_JUNCTION =
             MENUS.register("power_junction", () -> IMenuTypeExtension.create(PowerJunctionMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<FuelGeneratorMenu>> FUEL_GENERATOR =
+            MENUS.register("fuel_generator", () -> IMenuTypeExtension.create(FuelGeneratorMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<TwerkGeneratorMenu>> TWERK_GENERATOR =
+            MENUS.register("twerk_generator", () -> IMenuTypeExtension.create(TwerkGeneratorMenu::new));
 
     private ModMenus() {
     }

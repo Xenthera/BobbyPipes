@@ -79,7 +79,7 @@ public class LinkPipeBlock extends PipeBlock implements EntityBlock {
         if (registry.peerOf(self).isEmpty()) {
             return LinkStatus.WAITING;
         }
-        return registry.isLive(level.getServer(), self) ? LinkStatus.LIVE : LinkStatus.SEVERED;
+        return registry.isLive(self) ? LinkStatus.LIVE : LinkStatus.SEVERED;
     }
 
     @Override

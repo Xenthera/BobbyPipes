@@ -59,7 +59,22 @@ public final class EnergyRequestService {
 
     public static int request(ServerLevel level, PipeNetwork network, BlockPos dest, int amountFe,
                               boolean spendRequestPower) {
+        return request(level, network, dest, amountFe, spendRequestPower, true);
+    }
+
+    /**
+     * @param allowPartial when false, queue nothing unless the whole {@code amountFe} can be
+     *                     supplied and received right now. Automated callers keep the
+     *                     default of true; only the request screen offers the choice.
+     */
+    public static int request(ServerLevel level, PipeNetwork network, BlockPos dest, int amountFe,
+                              boolean spendRequestPower, boolean allowPartial) {
         if (amountFe <= 0) {
+            return 0;
+        }
+        // Checked before the power spend so an all-or-nothing request that cannot be filled
+        // costs nothing: it never reached a provider.
+        if (!allowPartial && !canSupplyInFull(level, network, dest, amountFe)) {
             return 0;
         }
         if (spendRequestPower && !network.power().trySpend(dest,
@@ -115,6 +130,24 @@ public final class EnergyRequestService {
     private static int saturatingAdd(int a, int b) {
         long sum = (long) a + (long) b;
         return sum > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) sum;
+    }
+
+    /**
+     * True when the full {@code amountFe} could both be supplied by the network and received
+     * by {@code dest} right now.
+     *
+     * <p>Both halves matter: a request for 10k FE fails all-or-nothing just as much when the
+     * destination buffer only has room for 4k as when the network only holds 4k.
+     */
+    private static boolean canSupplyInFull(ServerLevel level, PipeNetwork network,
+                                           BlockPos dest, int amountFe) {
+        int alreadyInbound = network.energySendQueue().queuedTo(dest)
+                + network.energyLedger().inbound(dest, EnergyKind.ENERGY);
+        int freeSpace = EnergyAccess.insertable(level, dest, saturatingAdd(alreadyInbound, amountFe));
+        if (Math.max(0, freeSpace - alreadyInbound) < amountFe) {
+            return false;
+        }
+        return availableFe(level, network, dest) >= amountFe;
     }
 
     /**

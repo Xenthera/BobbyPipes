@@ -215,23 +215,67 @@ public final class LinkPipeRegistry extends SavedData {
         setDirty();
     }
 
-    /** True when both ends of the pair exist in loaded chunks. */
-    public static boolean bothLoaded(MinecraftServer server, PipeNodeId a, PipeNodeId b) {
-        return isLoaded(server, a) && isLoaded(server, b);
+    /**
+     * Endpoints whose block entity is really in the level right now.
+     *
+     * <p>Maintained from the block entity's own load/unload callbacks, which is the whole
+     * point. The obvious test - {@code level.hasChunkAt(pos)} - is not a loaded test at all:
+     * it resolves to {@code ChunkHolder.getTicketLevel() <= ChunkLevel.byStatus(FULL)} read
+     * from the chunk map's *visible* (double-buffered) copy. After a dimension change the far
+     * side's ticket level decays through several values while the visible map is swapped
+     * asynchronously, so {@code hasChunkAt} flickers true/false for a while even though the
+     * chunk is never actually unloaded and no block entity callback fires. Deriving LIVE from
+     * it made the pipe strobe between LIVE and SEVERED on every dimension trip.
+     *
+     * <p>{@code onLoad} (from {@code Level.tickBlockEntities}) and {@code onChunkUnloaded}
+     * (from {@code ServerLevel.unload}) each fire exactly once per real transition, so this
+     * set changes only when something genuinely loaded or unloaded.
+     *
+     * <p>Static and server-wide because a pair spans dimensions, while the registry itself is
+     * per-level saved data. Never persisted - nothing is loaded until block entities say so,
+     * which is exactly the state a fresh server should start in.
+     */
+    private static final java.util.Set<PipeNodeId> LOADED =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Called from the endpoint's block entity once it is really in the level. */
+    public static void markLoaded(PipeNodeId node) {
+        LOADED.add(node);
     }
 
-    public static boolean isLoaded(MinecraftServer server, PipeNodeId node) {
-        ServerLevel level = server.getLevel(node.dimension());
-        return level != null && level.hasChunkAt(node.pos());
+    /** Called from the endpoint's block entity as it leaves the level. */
+    public static void markUnloaded(PipeNodeId node) {
+        LOADED.remove(node);
     }
 
     /**
-     * True when this endpoint has a peer and both chunks are loaded - the virtual edge
+     * Forgets every endpoint in {@code dimension}.
+     *
+     * <p>A single-player world that is quit and reloaded keeps this class loaded, so without
+     * this the second session would start believing the first session's endpoints are still
+     * in the level.
+     */
+    public static void forgetDimension(ResourceKey<Level> dimension) {
+        LOADED.removeIf(node -> node.dimension().equals(dimension));
+    }
+
+    /** True when both ends of the pair are loaded - the virtual edge should exist. */
+    public static boolean bothLoaded(PipeNodeId a, PipeNodeId b) {
+        return isLoaded(a) && isLoaded(b);
+    }
+
+    /** True when this endpoint's block entity is loaded. */
+    public static boolean isLoaded(PipeNodeId node) {
+        return LOADED.contains(node);
+    }
+
+    /**
+     * True when this endpoint has a peer and both ends are loaded - the virtual edge
      * should be present. The pair claim itself survives unload; only the edge severs.
      */
-    public boolean isLive(MinecraftServer server, PipeNodeId endpoint) {
+    public boolean isLive(PipeNodeId endpoint) {
         return peerOf(endpoint)
-                .filter(peer -> bothLoaded(server, endpoint, peer))
+                .filter(peer -> bothLoaded(endpoint, peer))
                 .isPresent();
     }
 
@@ -302,6 +346,11 @@ public final class LinkPipeRegistry extends SavedData {
     }
 
     private static void invalidateNode(MinecraftServer server, PipeNodeId node) {
+        if (!isLoaded(node)) {
+            // Writing a blockstate into a chunk that is on its way out only dirties it for
+            // no visible benefit - it recomputes from scratch when it loads again.
+            return;
+        }
         ServerLevel level = server.getLevel(node.dimension());
         if (level != null && level.hasChunkAt(node.pos())) {
             PipeNetwork.get(level).invalidate(node.pos());

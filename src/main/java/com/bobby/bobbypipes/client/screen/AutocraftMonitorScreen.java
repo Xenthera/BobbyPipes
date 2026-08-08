@@ -6,6 +6,7 @@ import com.bobby.bobbypipes.network.payload.CancelCraftJobPayload;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
 import com.bobby.bobbycore.client.gui.ThemedContainerScreen;
 import com.bobby.bobbycore.client.gui.draw.ScreenHeader;
+import com.bobby.bobbycore.client.gui.widget.UiButton;
 import com.bobby.bobbycore.client.gui.font.BobbyFonts;
 import com.bobby.bobbycore.client.gui.layout.GuiLayout;
 import com.bobby.bobbycore.client.gui.scroll.ScrollController;
@@ -45,6 +46,17 @@ public class AutocraftMonitorScreen extends ThemedContainerScreen<AutocraftMonit
     private final ScrollModel scrollModel = new ScrollModel(VISIBLE_CARDS, 1);
     private final ScrollController scrollController = new ScrollController(scrollModel).setTheme(PipeThemes.AUTOCRAFT_MONITOR);
     private CraftMonitorPayload.Card hoveredCard;
+    /**
+     * Order rows are three lines: what and how much, then where from and to, then which
+     * machine. Coordinates alone are hard to place in a busy base, so the block's own icon
+     * and name carry the identification and the numbers are there to confirm it.
+     */
+    private static final int ORDER_H = 42;
+    private static final int ORDER_STRIDE = ORDER_H + 3;
+    private static final int VISIBLE_ORDERS = Math.max(1, (LIST_H + 2) / ORDER_STRIDE);
+    /** False shows the job cards, true shows the outstanding delivery queue. */
+    private boolean showOrders;
+    private UiButton modeButton;
     private ItemStack headerIcon = ItemStack.EMPTY;
     /**
      * Cancel boxes from the last frame, rebuilt every render.
@@ -80,6 +92,22 @@ public class AutocraftMonitorScreen extends ThemedContainerScreen<AutocraftMonit
         this.headerIcon = ScreenHeader.blockIcon(menu.pos());
         scrollModel.setScrollRows(0);
         layoutScrollTrack();
+
+        modeButton = UiButton.builder(modeLabel(), button -> {
+                    showOrders = !showOrders;
+                    button.setMessage(modeLabel());
+                    scrollModel.setScrollRows(0);
+                })
+                // In the window header rather than above the list, so the list keeps its
+                // full height and the control sits with the title it qualifies.
+                .bounds(leftPos + PANEL_W - 60,
+                        topPos + (PipeThemes.AUTOCRAFT_MONITOR.headerHeight() - 13) / 2,
+                        54, 13)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(
+                        Component.translatable("gui.bobbypipes.autocraft_monitor.mode.tip")))
+                .build()
+                .setTheme(PipeThemes.AUTOCRAFT_MONITOR);
+        addRenderableWidget(modeButton);
     }
 
     private void layoutScrollTrack() {
@@ -137,8 +165,15 @@ public class AutocraftMonitorScreen extends ThemedContainerScreen<AutocraftMonit
             return;
         }
 
-        List<CraftMonitorPayload.Card> cards = ClientCraftMonitor.cards();
         cancelHits.clear();
+        if (showOrders) {
+            renderOrders(graphics, mouseX, mouseY);
+            layoutScrollTrack();
+            scrollController.draw(graphics, mouseX, mouseY);
+            return;
+        }
+
+        List<CraftMonitorPayload.Card> cards = ClientCraftMonitor.cards();
         if (cards.isEmpty()) {
             graphics.text(font,
                     Component.translatable("gui.bobbypipes.autocraft_monitor.empty"),
@@ -184,6 +219,74 @@ public class AutocraftMonitorScreen extends ThemedContainerScreen<AutocraftMonit
                     + want.stack().getCount() + "x " + want.stack().getHoverName().getString()));
         }
         graphics.setTooltipForNextFrame(font, tip, Optional.empty(), stack, mouseX, mouseY);
+    }
+
+    private Component modeLabel() {
+        return Component.translatable(showOrders
+                ? "gui.bobbypipes.autocraft_monitor.mode.orders"
+                : "gui.bobbypipes.autocraft_monitor.mode.jobs");
+    }
+
+    /**
+     * The outstanding delivery queue: one line per promise, who owes what to whom.
+     *
+     * <p>Deliberately plain text. Every routing fault in this system presents the same way
+     * from in front of a stalled machine, and the thing that actually distinguishes them is
+     * which promises exist and how much is left on each.
+     */
+    private void renderOrders(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+        List<CraftMonitorPayload.Order> orders = ClientCraftMonitor.orders();
+        if (orders.isEmpty()) {
+            graphics.text(font,
+                    Component.translatable("gui.bobbypipes.autocraft_monitor.orders.empty"),
+                    leftPos + LIST_X + 4, topPos + LIST_Y + 8, 0xFF_C0_C0_C0, false);
+            scrollModel.setVisibleRows(VISIBLE_ORDERS);
+            scrollModel.setTotalRows(1);
+            return;
+        }
+        scrollModel.setVisibleRows(VISIBLE_ORDERS);
+        scrollModel.setTotalRows(orders.size());
+
+        int scrollOff = scrollModel.scrollRows() * ORDER_STRIDE;
+        graphics.enableScissor(leftPos + LIST_X, topPos + LIST_Y,
+                leftPos + LIST_X + LIST_W, topPos + LIST_Y + LIST_H);
+        int drawY = topPos + LIST_Y - scrollOff;
+        for (CraftMonitorPayload.Order order : orders) {
+            if (drawY + ORDER_H >= topPos + LIST_Y && drawY <= topPos + LIST_Y + LIST_H) {
+                renderOrder(graphics, leftPos + LIST_X, drawY, order, mouseX, mouseY);
+            }
+            drawY += ORDER_STRIDE;
+        }
+        graphics.disableScissor();
+    }
+
+    private void renderOrder(GuiGraphicsExtractor graphics, int x, int y,
+                             CraftMonitorPayload.Order order, int mouseX, int mouseY) {
+        boolean hovered = mouseX >= x && mouseX < x + LIST_W && mouseY >= y && mouseY < y + ORDER_H;
+        graphics.fill(x, y, x + LIST_W, y + ORDER_H, hovered ? 0xFF_33_38_3A : 0xFF_24_26_28);
+        // Craft promises and provider withdrawals fail for very different reasons, so the
+        // stripe and the tint tell them apart before any of the text is read.
+        int tint = order.fromCraft() ? 0xFF_9A_D8_FF : 0xFF_D8_C8_8A;
+        graphics.fill(x, y, x + 3, y + ORDER_H, tint);
+
+        // Line 1: the item and how much of it is still owed.
+        graphics.item(order.item(), x + 6, y + 2);
+        graphics.text(font,
+                order.remaining() + "x " + order.item().getHoverName().getString(),
+                x + 26, y + 6, tint, false);
+
+        // Line 2: where it is coming from and going to.
+        graphics.text(font,
+                order.from().toShortString() + " -> " + order.to().toShortString(),
+                x + 26, y + 19, 0xFF_90_90_90, false);
+
+        // Line 3: the machine itself, which is what a player actually recognises.
+        ItemStack machine = order.machine();
+        if (!machine.isEmpty()) {
+            graphics.item(machine, x + 6, y + 23);
+            graphics.text(font, machine.getHoverName().getString(),
+                    x + 26, y + 27, 0xFF_B8_B8_B8, false);
+        }
     }
 
     private void renderCard(GuiGraphicsExtractor graphics,

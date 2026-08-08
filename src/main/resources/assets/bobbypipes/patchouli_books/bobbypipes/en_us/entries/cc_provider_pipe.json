@@ -6,12 +6,12 @@
   "pages": [
     {
       "type": "patchouli:text",
-      "text": "Peek stock offered by this provider (inventories and attached AE2 / RS networks). No extract from Lua — the network owns pulls.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:provider_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
+      "text": "Peek stock offered by this provider (inventories and attached AE2 / RS networks). No extract from Lua - the network owns pulls.$(br2)$(note)Peripheral type$()$(br)$(code)bobbypipes:provider_pipe$()$(br2)Attach a wired modem (or equivalent) to the pipe, then wrap it with $(code)peripheral.wrap(...)$()."
     },
     {
       "type": "patchouli:text",
       "title": "list",
-      "text": "$(method)list()$()$(br2)Items this provider currently offers.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() — item id$(li)$(field)count$() $(type)number$()$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)list()$()$()"
+      "text": "$(method)list()$()$(br2)Items this provider currently offers.$(br2)$(note)Returns$()$(br)$(li)$(field)name$() $(type)string$() - item id$(li)$(field)count$() $(type)number$()$(br2)$(note)Example$()$(br)$(code)$(kw)local$() t = p.$(method)list()$()$()"
     },
     {
       "type": "patchouli:text",
@@ -21,7 +21,7 @@
     {
       "type": "patchouli:text",
       "title": "getType",
-      "text": "$(method)getType()$()$(br2)Standard CC peripheral type id.$(br2)$(note)Returns$()$(br)$(li)$(type)string$() — $(str)bobbypipes:provider_pipe$()$(br2)$(note)Example$()$(br)$(code)p.$(method)getType()$()$()"
+      "text": "$(method)getType()$()$(br2)Standard CC peripheral type id.$(br2)$(note)Returns$()$(br)$(li)$(type)string$() - $(str)bobbypipes:provider_pipe$()$(br2)$(note)Example$()$(br)$(code)p.$(method)getType()$()$()"
     }
   ]
 }

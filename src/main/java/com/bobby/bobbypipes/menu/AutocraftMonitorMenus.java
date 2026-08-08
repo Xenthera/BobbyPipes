@@ -1,7 +1,9 @@
 package com.bobby.bobbypipes.menu;
 
 import com.bobby.bobbypipes.block.PipeBlock;
+import com.bobby.bobbypipes.logistics.CrossDimPipeGraph;
 import com.bobby.bobbypipes.logistics.PipeNetwork;
+import com.bobby.bobbypipes.logistics.PipeNodeId;
 import com.bobby.bobbypipes.network.payload.CraftMonitorPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -12,7 +14,9 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -38,7 +42,8 @@ public final class AutocraftMonitorMenus {
         ServerLevel level = player.level();
         Optional<BlockPos> seed = adjacentSmartPipe(level, monitorPos);
         if (seed.isEmpty()) {
-            PacketDistributor.sendToPlayer(player, new CraftMonitorPayload(false, java.util.List.of()));
+            PacketDistributor.sendToPlayer(player,
+                    new CraftMonitorPayload(false, java.util.List.of(), java.util.List.of()));
             return;
         }
         PipeNetwork network = PipeNetwork.get(level);
@@ -46,15 +51,36 @@ public final class AutocraftMonitorMenus {
         if (!routes.contains(seed.get())) {
             routes = network.rebuildNow(seed.get());
         }
-        Set<BlockPos> component = new HashSet<>();
-        component.add(seed.get().immutable());
+        Set<PipeNodeId> component = new HashSet<>();
+        component.add(PipeNodeId.of(level, seed.get()));
         routes.routesFrom(seed.get()).ifPresent(table -> {
             for (BlockPos dest : table.destinations()) {
-                component.add(dest.immutable());
+                component.add(PipeNodeId.of(level, dest));
             }
         });
-        PacketDistributor.sendToPlayer(player,
-                network.craftJobs().monitorSnapshot(level, network, component, level.getGameTime()));
+        // The monitor's own level only knows its own side of a link pair, and a job lives on
+        // the requester's level rather than the crafter's. Widen the component across live
+        // links, then ask every network - otherwise a craft ordered from the far side reads
+        // as "no crafts on this network" from here.
+        Set<PipeNodeId> reachable = CrossDimPipeGraph.expandAcrossLinks(component);
+        List<CraftMonitorPayload.Card> cards = new ArrayList<>();
+        List<CraftMonitorPayload.Order> orders = new ArrayList<>();
+        // Positions only, for the provider queue, which is keyed by BlockPos within a level.
+        Set<BlockPos> localComponent = new HashSet<>();
+        for (PipeNodeId node : reachable) {
+            if (node.dimension().equals(level.dimension())) {
+                localComponent.add(node.pos());
+            }
+        }
+        for (PipeNetwork candidate : PipeNetwork.instances()) {
+            cards.addAll(candidate.craftJobs().monitorCards(
+                    candidate.level(), candidate, reachable, level.getGameTime()));
+            orders.addAll(candidate.craftJobs().orderRows(candidate.level(), reachable));
+            if (candidate.level().dimension().equals(level.dimension())) {
+                orders.addAll(candidate.sendQueue().orderRows(candidate.level(), localComponent));
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new CraftMonitorPayload(true, cards, orders));
     }
 
     /** Resync every player who currently has the monitor open. */

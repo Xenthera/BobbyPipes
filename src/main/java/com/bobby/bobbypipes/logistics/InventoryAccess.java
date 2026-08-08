@@ -4,6 +4,7 @@ import com.bobby.bobbypipes.block.PipeBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.transfer.ResourceHandler;
@@ -339,6 +340,26 @@ public final class InventoryAccess {
             }
         }
         return java.util.Optional.empty();
+    }
+
+    /**
+     * The machine or container this pipe is attached to, as an item for display.
+     *
+     * <p>Coordinates alone are hard to place in a busy base; the block's own icon and name
+     * say "the alloy smelter" far faster than "20,64,-8" does.
+     *
+     * @return an empty stack when nothing is attached or it has no item form
+     */
+    public static ItemStack attachedBlockIcon(ServerLevel level, BlockPos pipe) {
+        java.util.Optional<Direction> side = inventorySide(level, pipe);
+        if (side.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        BlockPos neighbour = pipe.relative(side.get());
+        if (!level.hasChunkAt(neighbour)) {
+            return ItemStack.EMPTY;
+        }
+        return new ItemStack(level.getBlockState(neighbour).getBlock());
     }
 
     /**

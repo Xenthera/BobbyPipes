@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LinkPipeRegistryTest {
@@ -90,5 +91,75 @@ class LinkPipeRegistryTest {
         assertEquals(LinkClaimResult.OK, registry.claim(b, 9));
         assertEquals(LinkClaimResult.CHANNEL_FULL, registry.claim(c, 9));
         assertEquals(Optional.of(b), registry.peerOf(a));
+    }
+
+    @Test
+    @DisplayName("nothing is loaded until a block entity says so")
+    void nothingLoadedByDefault() {
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(8, 64, 8));
+        LinkPipeRegistry.markUnloaded(nether);
+        // A fresh server has seen no onLoad, so every endpoint reads unloaded - which is
+        // why a freshly loaded world settles on SEVERED rather than guessing LIVE.
+        assertFalse(LinkPipeRegistry.isLoaded(nether));
+    }
+
+    @Test
+    @DisplayName("a pair is live only while both ends are loaded")
+    void liveNeedsBothEnds() {
+        LinkPipeRegistry registry = new LinkPipeRegistry();
+        PipeNodeId over = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(8, 64, 8));
+        assertEquals(LinkClaimResult.OK, registry.claim(over, 4));
+        assertEquals(LinkClaimResult.OK, registry.claim(nether, 4));
+        LinkPipeRegistry.markUnloaded(over);
+        LinkPipeRegistry.markUnloaded(nether);
+
+        assertFalse(registry.isLive(over), "neither end loaded");
+
+        LinkPipeRegistry.markLoaded(over);
+        assertFalse(registry.isLive(over),
+                "the peer is still unloaded, so this end stays severed");
+
+        LinkPipeRegistry.markLoaded(nether);
+        assertTrue(registry.isLive(over), "both ends loaded");
+        assertTrue(registry.isLive(nether), "and it is symmetric");
+
+        // The peer going away severs immediately and stays severed - no flicker back.
+        LinkPipeRegistry.markUnloaded(nether);
+        assertFalse(registry.isLive(over));
+        assertFalse(registry.isLive(over), "still severed on a second look");
+
+        LinkPipeRegistry.markUnloaded(over);
+    }
+
+    @Test
+    @DisplayName("loaded state is per endpoint, not per position or dimension")
+    void loadedIsPerEndpoint() {
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(8, 64, 8));
+        PipeNodeId sameposOverworld = PipeNodeId.of(OVERWORLD, new BlockPos(8, 64, 8));
+        LinkPipeRegistry.markUnloaded(sameposOverworld);
+
+        LinkPipeRegistry.markLoaded(nether);
+        assertTrue(LinkPipeRegistry.isLoaded(nether));
+        assertFalse(LinkPipeRegistry.isLoaded(sameposOverworld),
+                "same coordinates in another dimension is a different endpoint");
+
+        LinkPipeRegistry.markUnloaded(nether);
+    }
+
+    @Test
+    @DisplayName("unloading a dimension forgets its endpoints, so a reloaded world starts clean")
+    void forgetDimensionClearsOnlyThatDimension() {
+        PipeNodeId over = PipeNodeId.of(OVERWORLD, new BlockPos(0, 64, 0));
+        PipeNodeId nether = PipeNodeId.of(NETHER, new BlockPos(8, 64, 8));
+        LinkPipeRegistry.markLoaded(over);
+        LinkPipeRegistry.markLoaded(nether);
+
+        LinkPipeRegistry.forgetDimension(NETHER);
+        assertFalse(LinkPipeRegistry.isLoaded(nether), "nether endpoints forgotten");
+        assertTrue(LinkPipeRegistry.isLoaded(over), "the overworld is untouched");
+
+        LinkPipeRegistry.forgetDimension(OVERWORLD);
+        assertFalse(LinkPipeRegistry.isLoaded(over));
     }
 }

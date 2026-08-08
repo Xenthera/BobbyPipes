@@ -8,6 +8,7 @@ import com.bobby.bobbypipes.block.entity.ChunkLoaderBlockEntity;
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.EnergySupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.FluidSupplierPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.FuelGeneratorBlockEntity;
 import com.bobby.bobbypipes.block.entity.PassiveSupplierPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
 import com.bobby.bobbypipes.block.entity.PipeBlockEntity;
@@ -15,6 +16,7 @@ import com.bobby.bobbypipes.block.entity.PowerJunctionBlockEntity;
 import com.bobby.bobbypipes.block.entity.ProviderPipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SatellitePipeBlockEntity;
 import com.bobby.bobbypipes.block.entity.SupplierPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.TwerkGeneratorBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -96,6 +98,14 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PowerJunctionBlockEntity>> POWER_JUNCTION =
             BLOCK_ENTITIES.register("power_junction", () -> new BlockEntityType<>(
                     PowerJunctionBlockEntity::new, Set.of(ModBlocks.POWER_JUNCTION.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FuelGeneratorBlockEntity>> FUEL_GENERATOR =
+            BLOCK_ENTITIES.register("fuel_generator", () -> new BlockEntityType<>(
+                    FuelGeneratorBlockEntity::new, Set.of(ModBlocks.FUEL_GENERATOR.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TwerkGeneratorBlockEntity>> TWERK_GENERATOR =
+            BLOCK_ENTITIES.register("twerk_generator", () -> new BlockEntityType<>(
+                    TwerkGeneratorBlockEntity::new, Set.of(ModBlocks.TWERK_GENERATOR.get())));
 
     private ModBlockEntities() {
     }

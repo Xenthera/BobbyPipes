@@ -33,6 +33,23 @@ public final class ModCapabilities {
                 ModBlockEntities.POWER_JUNCTION.get(),
                 (be, side) -> be.energyHandler(side));
 
+        // Generators expose an extract-only handler, so a pipe or cable can pull from them
+        // but nothing can push energy back in.
+        event.registerBlockEntity(
+                Capabilities.Energy.BLOCK,
+                ModBlockEntities.FUEL_GENERATOR.get(),
+                (be, side) -> be.energyHandler(side));
+        event.registerBlockEntity(
+                Capabilities.Energy.BLOCK,
+                ModBlockEntities.TWERK_GENERATOR.get(),
+                (be, side) -> be.energyHandler(side));
+
+        // Fuel goes in by hopper or pipe as well as by hand.
+        event.registerBlockEntity(
+                Capabilities.Item.BLOCK,
+                ModBlockEntities.FUEL_GENERATOR.get(),
+                (be, side) -> be.itemHandler());
+
         // Plain pipe accepts items too, but they drift rather than being routed. No block
         // entity is involved, so a long run of pipe stays free.
         event.registerBlock(
@@ -47,7 +64,7 @@ public final class ModCapabilities {
                                 : null,
                 ModBlocks.PIPE.get());
 
-        // Soft-optional CC:Tweaked peripherals — keep CC types out of the classload path
+        // Soft-optional CC:Tweaked peripherals - keep CC types out of the classload path
         // when the mod is absent.
         if (ModList.get().isLoaded("computercraft")) {
             ComputerCraftCompat.register(event);

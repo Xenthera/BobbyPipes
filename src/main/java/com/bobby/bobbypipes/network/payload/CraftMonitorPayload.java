@@ -18,7 +18,31 @@ import java.util.List;
  * <p>Ticks remaining are relative to send time so the client can show bars without
  * knowing server {@code gameTime}.
  */
-public record CraftMonitorPayload(boolean linked, List<Card> cards) implements CustomPacketPayload {
+public record CraftMonitorPayload(boolean linked, List<Card> cards, List<Order> orders)
+        implements CustomPacketPayload {
+
+    /**
+     * One outstanding delivery on the network: who owes what to whom.
+     *
+     * <p>The queue view exists because every routing bug in this system has looked the same
+     * from the outside - a crafter waiting - while the cause was in who had been promised
+     * what. Logistics Pipes exposes its order manager for the same reason.
+     *
+     * @param fromCraft true when a crafter owes this, false when it is a provider withdrawal
+     */
+    public record Order(ItemStack item, BlockPos from, BlockPos to, int remaining,
+                        boolean fromCraft, ItemStack machine) {
+
+        public static final StreamCodec<RegistryFriendlyByteBuf, Order> STREAM_CODEC =
+                StreamCodec.composite(
+                        ItemStack.OPTIONAL_STREAM_CODEC, Order::item,
+                        BlockPos.STREAM_CODEC, Order::from,
+                        BlockPos.STREAM_CODEC, Order::to,
+                        ByteBufCodecs.VAR_INT, Order::remaining,
+                        ByteBufCodecs.BOOL, Order::fromCraft,
+                        ItemStack.OPTIONAL_STREAM_CODEC, Order::machine,
+                        Order::new);
+    }
 
     public static final Type<CraftMonitorPayload> TYPE =
             new Type<>(Identifier.fromNamespaceAndPath(BobbyPipes.MOD_ID, "craft_monitor"));
@@ -27,6 +51,7 @@ public record CraftMonitorPayload(boolean linked, List<Card> cards) implements C
             StreamCodec.composite(
                     ByteBufCodecs.BOOL, CraftMonitorPayload::linked,
                     Card.STREAM_CODEC.apply(ByteBufCodecs.list()), CraftMonitorPayload::cards,
+                    Order.STREAM_CODEC.apply(ByteBufCodecs.list()), CraftMonitorPayload::orders,
                     CraftMonitorPayload::new);
 
     @Override

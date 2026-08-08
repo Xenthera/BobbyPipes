@@ -48,6 +48,8 @@ public final class ModCreativeTabs {
                         output.accept(ModBlocks.AUTOCRAFT_MONITOR.get());
                         output.accept(ModBlocks.POWER_JUNCTION.get());
                         output.accept(ModBlocks.CHUNK_LOADER.get());
+                        output.accept(ModBlocks.FUEL_GENERATOR.get());
+                        output.accept(ModBlocks.TWERK_GENERATOR.get());
 
                         // Items.
                         output.accept(ModItems.WRENCH.get());

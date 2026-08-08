@@ -18,8 +18,11 @@ import net.neoforged.neoforge.transfer.fluid.FluidResource;
 
 /**
  * Client -> server: submit a request from the fluid request pipe screen.
+ *
+ * @param allowPartial when false, send nothing unless the whole amount can be supplied
  */
-public record RequestFluidPayload(BlockPos pos, FluidResource fluid, int amountMb)
+public record RequestFluidPayload(BlockPos pos, FluidResource fluid, int amountMb,
+                                  boolean allowPartial)
         implements CustomPacketPayload {
 
     public static final Type<RequestFluidPayload> TYPE =
@@ -30,6 +33,7 @@ public record RequestFluidPayload(BlockPos pos, FluidResource fluid, int amountM
                     BlockPos.STREAM_CODEC, RequestFluidPayload::pos,
                     FluidResource.STREAM_CODEC, RequestFluidPayload::fluid,
                     ByteBufCodecs.VAR_INT, RequestFluidPayload::amountMb,
+                    ByteBufCodecs.BOOL, RequestFluidPayload::allowPartial,
                     RequestFluidPayload::new);
 
     @Override
@@ -53,8 +57,11 @@ public record RequestFluidPayload(BlockPos pos, FluidResource fluid, int amountM
             PipeNetwork network = PipeNetwork.get(player.level());
             network.rebuildNow(payload.pos());
             int shipped = FluidRequestService.request(player.level(), network, payload.pos(),
-                    payload.fluid(), payload.amountMb());
-            RequestChat.fluid(player, payload.fluid(), payload.amountMb(), shipped);
+                    payload.fluid(), payload.amountMb(), true, payload.allowPartial());
+            // Only meaningful when nothing shipped; RequestChat ignores it otherwise.
+            String failKey = payload.allowPartial()
+                    ? "" : "chat.bobbypipes.request.fail.incomplete.amount";
+            RequestChat.fluid(player, payload.fluid(), payload.amountMb(), shipped, failKey);
             FluidRequestMenus.syncStock(player, payload.pos());
         });
     }

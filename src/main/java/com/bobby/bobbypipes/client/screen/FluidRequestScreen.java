@@ -10,6 +10,7 @@ import com.bobby.bobbycore.client.gui.widget.UiTextBox;
 import com.bobby.bobbypipes.client.ClientFluidRequestGui;
 import com.bobby.bobbypipes.menu.FluidRequestMenu;
 import com.bobby.bobbypipes.network.payload.FluidStockPayload;
+import com.bobby.bobbypipes.client.ClientRequestOptions;
 import com.bobby.bobbypipes.network.payload.RequestFluidPayload;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -35,10 +36,12 @@ public class FluidRequestScreen extends ThemedContainerScreen<FluidRequestMenu> 
     private static final int ACTION_H = 16;
     private static final int AMOUNT_W = 60;
     private static final int TOOL_GAP = 3;
+    private static final int PARTIAL_W = 22;
 
     private FluidGrid grid;
     private UiTextBox amount;
     private UiButton requestButton;
+    private UiButton partialButton;
     private FluidResource selected = FluidResource.EMPTY;
     private ItemStack headerIcon = ItemStack.EMPTY;
 
@@ -95,7 +98,8 @@ public class FluidRequestScreen extends ThemedContainerScreen<FluidRequestMenu> 
         addRenderableWidget(amount);
 
         int requestX = leftPos + CONTENT_X + AMOUNT_W + TOOL_GAP;
-        int requestW = leftPos + imageWidth - CONTENT_X - requestX;
+        int partialX = leftPos + imageWidth - CONTENT_X - PARTIAL_W;
+        int requestW = partialX - TOOL_GAP - requestX;
         requestButton = UiButton.builder(
                         Component.translatable("gui.bobbypipes.fluid_request.submit"),
                         button -> sendRequest())
@@ -103,6 +107,18 @@ public class FluidRequestScreen extends ThemedContainerScreen<FluidRequestMenu> 
                 .build()
                 .setTheme(PipeThemes.REQUEST);
         addRenderableWidget(requestButton);
+
+        partialButton = UiButton.builder(partialLabel(), button -> {
+                    ClientRequestOptions.toggleFluidAllowPartial();
+                    button.setMessage(BobbyFonts.apply(partialLabel()));
+                    button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                            partialTooltip()));
+                })
+                .bounds(partialX, topPos + ay, PARTIAL_W, ACTION_H)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(partialTooltip()))
+                .build()
+                .setTheme(PipeThemes.REQUEST);
+        addRenderableWidget(partialButton);
     }
 
     @Override
@@ -116,7 +132,19 @@ public class FluidRequestScreen extends ThemedContainerScreen<FluidRequestMenu> 
         if (selected.isEmpty() || wanted <= 0) {
             return;
         }
-        ClientPacketDistributor.sendToServer(new RequestFluidPayload(menu.pos(), selected, wanted));
+        ClientPacketDistributor.sendToServer(new RequestFluidPayload(
+                menu.pos(), selected, wanted, ClientRequestOptions.fluidAllowPartial()));
+    }
+
+    /** Approximate sign while a short order may still ship, equals sign for exact-only. */
+    private static Component partialLabel() {
+        return BobbyFonts.literal(ClientRequestOptions.fluidAllowPartial() ? "≈" : "=");
+    }
+
+    private static Component partialTooltip() {
+        return Component.translatable(ClientRequestOptions.fluidAllowPartial()
+                ? "gui.bobbypipes.request.partial.on"
+                : "gui.bobbypipes.request.partial.off");
     }
 
     private int parseAmount() {

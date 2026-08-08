@@ -1,6 +1,7 @@
 package com.bobby.bobbypipes.logistics;
 
 import com.bobby.bobbypipes.block.entity.CraftingPipeBlockEntity;
+import com.bobby.bobbypipes.block.entity.PatternTableBlockEntity;
 import com.bobby.bobbypipes.craft.CraftPattern;
 import com.bobby.bobbypipes.logistics.craft.CraftJobPolicy;
 import com.bobby.bobbypipes.logistics.craft.CraftParticles;
@@ -47,7 +48,17 @@ public final class CraftJobManager {
     }
 
     private final List<Job> jobs = new ArrayList<>();
-    private long nextJobId = 1L;
+    /**
+     * Job ids are unique across every manager, not just this one.
+     *
+     * <p>The Autocraft Monitor lists jobs from across live interdimensional links, so the
+     * cancel button has only an id to go on and has to find the owning network by sweeping.
+     * A per-manager counter handed out id 1 in every dimension, which would have cancelled
+     * whichever network happened to be swept first. Ids are never persisted, so a plain
+     * static counter is enough.
+     */
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_JOB_ID =
+            new java.util.concurrent.atomic.AtomicLong(1L);
     private long nextRequestId = 1L;
 
     /** How long a failure stays visible in the overlay after the job is gone. */
@@ -92,6 +103,157 @@ public final class CraftJobManager {
 
     public int jobCount() {
         return jobs.size();
+    }
+
+    /**
+     * Runs {@code crafter} is already committed to across every open job.
+     *
+     * <p>Planning uses this to hand new work to the least busy crafter, rather than splitting
+     * evenly and piling onto one that is already backed up.
+     */
+    public int outstandingRunsAt(PipeNodeId crafter) {
+        int runs = 0;
+        for (Job job : jobs) {
+            if (job.crafter.equals(crafter)) {
+                runs += Math.max(0, job.runsRemaining);
+            }
+        }
+        return runs;
+    }
+
+    // ---------------------------------------------------------------- save data
+
+    /** One plan-bound input as save data. {@code fromCraft} distinguishes the two origins. */
+    public record SavedInput(ItemResource item, int amount, boolean fromCraft, PipeNodeId from) {
+    }
+
+    /** A downstream crafter's outstanding claim on this job's output. */
+    public record SavedOwed(PipeNodeId consumer, ItemResource item, int remaining) {
+    }
+
+    /** Stock a bound provider still owes this job. */
+    public record SavedStock(PipeNodeId provider, ItemResource item, int remaining) {
+    }
+
+    /** A stack of output extracted but not yet placed, or mid-extract. */
+    public record SavedStack(ItemResource item, int count) {
+    }
+
+    /**
+     * Where a job is in its run cycle.
+     *
+     * <p>Grouped rather than three loose booleans on {@link SavedJob} because the record codec
+     * builder tops out at sixteen fields, and these three belong together anyway.
+     */
+    public record SavedProgress(boolean waitingForOutput, boolean armedThisRun,
+                                boolean requestedThisRun) {
+    }
+
+    /** One craft job, flattened for save data. */
+    public record SavedJob(long id, long requestId, PipeNodeId crafter, PipeNodeId requester,
+                           ItemResource output, int runsRemaining, int remainingForRequester,
+                           List<SavedInput> inputs, List<PipeNodeId> dependsOn,
+                           List<SavedStock> stockRemaining, List<SavedOwed> owes,
+                           SavedProgress progress, List<SavedStack> outputLeft,
+                           int outputLeftRuns, List<SavedStack> held) {
+    }
+
+    /** Every live job plus the request counter, for save data. */
+    public record Saved(List<SavedJob> jobs, long nextRequestId) {
+    }
+
+    public Saved capture() {
+        List<SavedJob> out = new ArrayList<>(jobs.size());
+        for (Job job : jobs) {
+            List<SavedInput> inputs = new ArrayList<>();
+            for (RequestPlan.Sourced<PipeNodeId, ItemResource> input : job.inputs) {
+                PipeNodeId from = input.origin() instanceof RequestPlan.Origin.Stock<PipeNodeId> stock
+                        ? stock.provider()
+                        : ((RequestPlan.Origin.Craft<PipeNodeId>) input.origin()).crafter();
+                inputs.add(new SavedInput(input.item(), input.amount(), input.fromCraft(), from));
+            }
+            List<SavedStock> stock = new ArrayList<>();
+            for (Map.Entry<StockBinding, Integer> entry : job.stockRemaining.entrySet()) {
+                stock.add(new SavedStock(entry.getKey().provider(), entry.getKey().item(),
+                        entry.getValue()));
+            }
+            List<SavedOwed> owed = new ArrayList<>();
+            for (Owed owe : job.owes) {
+                owed.add(new SavedOwed(owe.consumer, owe.item, owe.remaining));
+            }
+            out.add(new SavedJob(job.id, job.requestId, job.crafter, job.requester, job.output,
+                    job.runsRemaining, job.remainingForRequester, inputs,
+                    List.copyOf(job.dependsOn), stock, owed,
+                    new SavedProgress(job.phase == CraftJobPolicy.Phase.WAIT_OUTPUT,
+                            job.armedThisRun, job.requestedThisRun),
+                    toStacks(job.outputLeft), job.outputLeftRuns, toStacks(job.held)));
+        }
+        return new Saved(out, nextRequestId);
+    }
+
+    /**
+     * Replaces the queue with {@code saved}.
+     *
+     * <p>Seeds the shared job-id counter past every restored id. The counter is static because
+     * the monitor cancels by id across networks, so a collision after a reload would cancel a
+     * job in another dimension.
+     */
+    public void restore(Saved saved) {
+        jobs.clear();
+        long highest = 0L;
+        for (SavedJob data : saved.jobs()) {
+            List<RequestPlan.Sourced<PipeNodeId, ItemResource>> inputs = new ArrayList<>();
+            for (SavedInput input : data.inputs()) {
+                RequestPlan.Origin<PipeNodeId> origin = input.fromCraft()
+                        ? new RequestPlan.Origin.Craft<>(input.from())
+                        : new RequestPlan.Origin.Stock<>(input.from());
+                inputs.add(new RequestPlan.Sourced<>(input.item(), input.amount(), origin));
+            }
+            Job job = new Job(data.id(), data.requestId(), data.crafter(), data.requester(),
+                    data.output(), data.runsRemaining(), data.remainingForRequester(),
+                    inputs, data.dependsOn());
+            // The constructor derives stockRemaining from inputs; the saved figures are what
+            // is actually left after earlier pulls, so they replace it wholesale.
+            job.stockRemaining.clear();
+            for (SavedStock stock : data.stockRemaining()) {
+                job.stockRemaining.put(
+                        new StockBinding(stock.provider(), stock.item()), stock.remaining());
+            }
+            for (SavedOwed owed : data.owes()) {
+                job.owes.add(new Owed(owed.consumer(), owed.item(), owed.remaining()));
+            }
+            job.phase = data.progress().waitingForOutput()
+                    ? CraftJobPolicy.Phase.WAIT_OUTPUT
+                    : CraftJobPolicy.Phase.GATHER;
+            job.armedThisRun = data.progress().armedThisRun();
+            job.requestedThisRun = data.progress().requestedThisRun();
+            job.outputLeftRuns = data.outputLeftRuns();
+            if (!data.outputLeft().isEmpty()) {
+                job.outputLeft = new LinkedHashMap<>();
+                for (SavedStack stack : data.outputLeft()) {
+                    job.outputLeft.merge(stack.item(), stack.count(), Integer::sum);
+                }
+            }
+            for (SavedStack stack : data.held()) {
+                job.held.merge(stack.item(), stack.count(), Integer::sum);
+            }
+            jobs.add(job);
+            highest = Math.max(highest, job.id);
+        }
+        nextRequestId = Math.max(nextRequestId, saved.nextRequestId());
+        long firstFreeId = highest + 1L;
+        NEXT_JOB_ID.updateAndGet(current -> Math.max(current, firstFreeId));
+    }
+
+    private static List<SavedStack> toStacks(Map<ItemResource, Integer> counts) {
+        if (counts == null || counts.isEmpty()) {
+            return List.of();
+        }
+        List<SavedStack> out = new ArrayList<>(counts.size());
+        for (Map.Entry<ItemResource, Integer> entry : counts.entrySet()) {
+            out.add(new SavedStack(entry.getKey(), entry.getValue()));
+        }
+        return out;
     }
 
     /**
@@ -150,7 +312,7 @@ public final class CraftJobManager {
                 existing.mergeStep(step, forRequester);
             } else {
                 Job job = new Job(
-                        nextJobId++,
+                        NEXT_JOB_ID.getAndIncrement(),
                         requestId,
                         step.crafter(),
                         requester,
@@ -338,6 +500,12 @@ public final class CraftJobManager {
             Job job = iterator.next();
             ServerLevel crafterLevel = levelOf(level, job.crafter);
             PipeNetwork crafterNetwork = networkOf(level, job.crafter);
+            // An unloaded crafter is waiting, not gone. Reading it blind would both force
+            // its chunk in and, on the tick after a world load, report every restored job as
+            // having no crafting pipe - deleting the queue we just restored.
+            if (crafterLevel != null && !crafterLevel.hasChunkAt(job.crafter.pos())) {
+                continue;
+            }
             if (crafterLevel == null || crafterNetwork == null
                     || !(crafterLevel.getBlockEntity(job.crafter.pos()) instanceof CraftingPipeBlockEntity be)
                     || be.pattern().isEmpty()) {
@@ -369,6 +537,7 @@ public final class CraftJobManager {
 
             Map<String, BlockPos> satellites =
                     SatelliteLookup.findAll(crafterLevel, crafterNetwork, job.crafter.pos());
+            flushHeld(crafterLevel, crafterNetwork, job, satellites);
             // Nothing left to deliver means nothing left to make. Runs remaining is a
             // budget, not an obligation: once every downstream claim and the requester's
             // share are shipped, continuing would pull more ingredients and craft into
@@ -433,6 +602,11 @@ public final class CraftJobManager {
                 job.runsRemaining -= Math.max(1, job.outputLeftRuns);
                 job.outputLeftRuns = 0;
                 if (job.runsRemaining <= 0) {
+                    if (!CraftJobPolicy.mayCloseJob(job.runsRemaining, !job.held.isEmpty())) {
+                        // Still holding output for a consumer that had no room. Stay alive;
+                        // flushHeld retries every tick and the job closes once it is empty.
+                        continue;
+                    }
                     completeJob(crafterLevel, crafterNetwork, job, pattern, satellites);
                     iterator.remove();
                     continue;
@@ -458,6 +632,7 @@ public final class CraftJobManager {
                              Job job,
                              CraftPattern pattern,
                              Map<String, BlockPos> satellites) {
+        releaseHeld(level, network, job);
         cancelIngredientInbound(level, network, job, pattern, satellites);
         dumpJobBuffers(level, network, job, pattern, satellites);
     }
@@ -534,6 +709,13 @@ public final class CraftJobManager {
 
             ServerLevel crafterLevel = levelOf(level, job.crafter);
             PipeNetwork crafterNetwork = networkOf(level, job.crafter);
+            if (crafterLevel != null && !crafterLevel.hasChunkAt(job.crafter.pos())) {
+                // Waiting for its chunk, not broken - and saying so beats force-loading it
+                // just to fill in a debug line.
+                detail.add("crafter's chunk is not loaded");
+                out.add(new JobReport(job.crafter.pos(), headline + " (UNLOADED)", detail));
+                continue;
+            }
             if (crafterLevel == null || crafterNetwork == null
                     || !(crafterLevel.getBlockEntity(job.crafter.pos()) instanceof CraftingPipeBlockEntity be)
                     || be.pattern().isEmpty()) {
@@ -609,17 +791,22 @@ public final class CraftJobManager {
     }
 
     /**
-     * Cards for the Autocraft Monitor UI: active jobs on {@code component} plus recent
-     * failures, with soft/hard timeout remaining ticks.
+     * Cards for the Autocraft Monitor UI: this manager's jobs whose crafter is in
+     * {@code component}, plus recent failures there.
+     *
+     * <p>Returns cards rather than a finished payload because one manager is never the whole
+     * answer. A job is queued on the <em>requester's</em> level, so a craft ordered in the
+     * overworld that runs on a nether crafting pipe lives in the overworld manager and would
+     * be invisible to a monitor on either side if each only asked its own level. The caller
+     * sweeps every network and merges.
      */
-    public CraftMonitorPayload monitorSnapshot(ServerLevel level,
-                                               PipeNetwork network,
-                                               Set<BlockPos> component,
-                                               long gameTime) {
+    public List<CraftMonitorPayload.Card> monitorCards(ServerLevel level,
+                                                       PipeNetwork network,
+                                                       Set<PipeNodeId> component,
+                                                       long gameTime) {
         List<CraftMonitorPayload.Card> cards = new ArrayList<>();
         for (Failure failure : failures) {
-            if (!failure.dimension.equals(level.dimension())
-                    || !component.contains(failure.crafter)) {
+            if (!component.contains(PipeNodeId.of(failure.dimension, failure.crafter))) {
                 continue;
             }
             ItemStack out = failure.output.toStack(1);
@@ -633,8 +820,9 @@ public final class CraftJobManager {
                     List.of()));
         }
         for (Job job : jobs) {
-            if (!job.crafter.dimension().equals(level.dimension())
-                    || !component.contains(job.crafter.pos())) {
+            // Matched on the full node, not a bare position: the component now spans
+            // dimensions, and two dimensions can hold a crafter at the same coordinates.
+            if (!component.contains(job.crafter)) {
                 continue;
             }
             CraftMonitorPayload.Status status;
@@ -699,7 +887,45 @@ public final class CraftJobManager {
                     detail,
                     wants));
         }
-        return new CraftMonitorPayload(true, cards);
+        return cards;
+    }
+
+    /**
+     * Outstanding craft claims in {@code component}, for the monitor's order queue.
+     *
+     * <p>Both the downstream {@link Owed} claims and what the job still owes the original
+     * requester, since a delivery stuck at either end looks identical from in front of a
+     * machine that is not running.
+     */
+    public List<CraftMonitorPayload.Order> orderRows(ServerLevel any, Set<PipeNodeId> component) {
+        List<CraftMonitorPayload.Order> rows = new ArrayList<>();
+        for (Job job : jobs) {
+            if (!component.contains(job.crafter)) {
+                continue;
+            }
+            ServerLevel crafterLevel = levelOf(any, job.crafter);
+            ItemStack machine = crafterLevel == null
+                    ? ItemStack.EMPTY
+                    : InventoryAccess.attachedBlockIcon(crafterLevel, job.crafter.pos());
+            for (Owed owed : job.owes) {
+                if (owed.remaining <= 0) {
+                    continue;
+                }
+                ItemStack stack = owed.item.toStack(1);
+                if (!stack.isEmpty()) {
+                    rows.add(new CraftMonitorPayload.Order(stack, job.crafter.pos(),
+                            owed.consumer.pos(), owed.remaining, true, machine));
+                }
+            }
+            if (job.remainingForRequester > 0) {
+                ItemStack stack = job.output.toStack(1);
+                if (!stack.isEmpty()) {
+                    rows.add(new CraftMonitorPayload.Order(stack, job.crafter.pos(),
+                            job.requester.pos(), job.remainingForRequester, true, machine));
+                }
+            }
+        }
+        return rows;
     }
 
     /**
@@ -716,7 +942,9 @@ public final class CraftJobManager {
             }
             ServerLevel crafterLevel = levelOf(level, job.crafter);
             PipeNetwork crafterNetwork = networkOf(level, job.crafter);
+            // Nothing to draw over an unloaded chunk, and nobody to see it.
             if (crafterLevel == null || crafterNetwork == null
+                    || !crafterLevel.hasChunkAt(job.crafter.pos())
                     || !(crafterLevel.getBlockEntity(job.crafter.pos()) instanceof CraftingPipeBlockEntity be)
                     || be.pattern().isEmpty()) {
                 continue;
@@ -824,6 +1052,14 @@ public final class CraftJobManager {
         if (from.equals(to)) {
             return false;
         }
+        // Ask the links first. They can join two places local routing sees as separate,
+        // including two components in the same dimension when the chain hops out through
+        // another world and back. Judging that shape on the local snapshot alone declared
+        // every job severed the moment it started, which is what failed a whole bank of
+        // crafters at once.
+        if (CrossDimPipeGraph.canReach(from, to)) {
+            return false;
+        }
         if (from.sameDimension(to) && from.dimension().equals(network.level().dimension())) {
             RoutingSnapshot<BlockPos> routes = network.routes();
             return routes.contains(from.pos())
@@ -885,6 +1121,15 @@ public final class CraftJobManager {
      * intermediate) gather in one wave instead of several.
      */
     private static final int MAX_GATHER_BATCH_RUNS = 256;
+
+    /**
+     * Longest a job will sit on finished output waiting for the rest of a batch.
+     *
+     * <p>Half a second still covers the case batching exists for - a crafter producing a run
+     * per tick fills its output slot long before this - while being short enough not to stack
+     * up noticeably across a multi-step craft chain, where every link pays this once.
+     */
+    private static final long OUTPUT_ACCUMULATE_TICKS = 10L;
 
     /**
      * Orders whatever this job is still short of for as many runs as the buffers can fit.
@@ -1084,6 +1329,23 @@ public final class CraftJobManager {
         return need - remaining;
     }
 
+    /**
+     * Items physically on their way to {@code dest}: queued withdrawals and flying parcels.
+     *
+     * <p>Deliberately excludes craft-owed output, unlike {@link #inboundTo}. See
+     * {@link CraftJobPolicy#roomFor} for why counting it deadlocked the last delivery of a
+     * craft.
+     */
+    private static int enRouteTo(PipeNodeId dest, ItemResource item) {
+        int queued = 0;
+        int flying = 0;
+        for (PipeNetwork net : PipeNetwork.instances()) {
+            queued += net.sendQueue().queuedToward(dest, item);
+            flying += net.flyingItemsToward(dest, item);
+        }
+        return Math.max(0, queued) + Math.max(0, flying);
+    }
+
     static int inboundTo(PipeNetwork hint, PipeNodeId dest, ItemResource item) {
         int queued = 0;
         int flying = 0;
@@ -1141,9 +1403,18 @@ public final class CraftJobManager {
 
         if (job.outputLeft == null) {
             int available = availableRuns(level, job.crafter.pos(), results);
+            if (available <= 0) {
+                // Nothing to accumulate yet, so the batch window has not opened.
+                job.outputPendingSince = -1L;
+                return false;
+            }
+            if (job.outputPendingSince < 0L) {
+                job.outputPendingSince = level.getGameTime();
+            }
             boolean moreComing = gatherComplete(level, job, pattern, satellites);
             int runs = CraftJobPolicy.extractBatchRuns(
-                    available, job.runsRemaining, outputCapRuns(results), moreComing);
+                    available, job.runsRemaining, outputCapRuns(results), moreComing,
+                    level.getGameTime() - job.outputPendingSince, OUTPUT_ACCUMULATE_TICKS);
             if (runs <= 0) {
                 return false;
             }
@@ -1170,6 +1441,14 @@ public final class CraftJobManager {
             ItemResource item = entry.getKey();
             int available = InventoryAccess.count(level, job.crafter.pos(), item);
             int want = Math.min(Math.min(left, allow), available);
+            // Do not pull out of the machine what cannot be handed on. Left inside, it stops
+            // the machine on its own, which is the backpressure that keeps a fast crafter
+            // from burying a slower consumer downstream. A pattern table is exempt: its one
+            // output slot means declining to drain it stops it crafting entirely, so it is
+            // emptied at the pulse rate and the overflow is held on the job.
+            if (!drivesPatternTable(level, job.crafter.pos())) {
+                want = Math.min(want, placeableNow(level, network, job, item, want));
+            }
             if (want <= 0) {
                 continue;
             }
@@ -1189,6 +1468,8 @@ public final class CraftJobManager {
         job.outputLeft.entrySet().removeIf(e -> e.getValue() <= 0);
         if (job.outputLeft.isEmpty()) {
             job.outputLeft = null;
+            // Batch shipped: the next one starts its own accumulation window.
+            job.outputPendingSince = -1L;
             return true;
         }
         return false;
@@ -1224,6 +1505,142 @@ public final class CraftJobManager {
     }
 
     /**
+     * How many of {@code item} {@code dest} can physically take right now.
+     *
+     * <p>Free space minus what is already queued or flying toward it. Gather has always done
+     * this on the way in ({@link CraftJobPolicy#pullNeed} against
+     * {@link InventoryAccess#insertable}); shipping did not, so a fast crafter feeding a
+     * slower one downstream kept dispatching against what the plan said it owed rather than
+     * what the consumer could hold. The overflow had nowhere to go and ended up on the floor.
+     *
+     * @param want upper bound to probe for; probing is not free, so callers pass what they
+     *             actually intend to send rather than a stack
+     */
+    private static int acceptableAt(ServerLevel any, PipeNodeId dest, ItemResource item, int want) {
+        if (want <= 0 || item.isEmpty()) {
+            return 0;
+        }
+        ServerLevel destLevel = levelOf(any, dest);
+        PipeNetwork destNetwork = networkOf(any, dest);
+        if (destLevel == null || destNetwork == null) {
+            return 0;
+        }
+        // Probe for the ask *plus* what is already on its way, then subtract the latter. The
+        // probe is capped at whatever it is asked for, so probing only {@code want} and then
+        // subtracting in-flight reports zero room the moment a batch is travelling - even
+        // when the machine is nearly empty. EnergyRequestService hit this first and its
+        // comment says the same thing; the craft path never got the same treatment, which is
+        // why three smelters read "no room" on an alloy smelter holding four ingots.
+        int enRoute = enRouteTo(dest, item);
+        int space = InventoryAccess.insertable(
+                destLevel, dest.pos(), item, saturatingAdd(want, enRoute));
+        return CraftJobPolicy.roomFor(want, space, enRoute);
+    }
+
+    /** Capped add, so a huge claim plus a huge in-flight count cannot wrap negative. */
+    private static int saturatingAdd(int a, int b) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, a) + Math.max(0, b));
+    }
+
+    /**
+     * True when {@code consumer} is a machine worth throttling.
+     *
+     * <p>Backpressure exists for exactly one situation: a third-party machine with a small
+     * output that jams when it is fed faster than it works - three fast smelters feeding one.
+     * It is not a general flow-control rule, and applying it everywhere caused two stalls in a
+     * row. Our own pattern table takes what it is given into eighteen resource slots and gets
+     * on with it, so throttling one only stopped a plank table from feeding a chest table.
+     *
+     * <p>The requester is not consulted at all: it is a delivery address, not a machine, and if
+     * its container is full the surplus path already routes or spills.
+     */
+    private static boolean throttles(ServerLevel any, PipeNodeId consumer) {
+        ServerLevel consumerLevel = levelOf(any, consumer);
+        if (consumerLevel == null || !consumerLevel.hasChunkAt(consumer.pos())) {
+            return false;
+        }
+        return !drivesPatternTable(consumerLevel, consumer.pos());
+    }
+
+    /**
+     * True when this crafting pipe drives one of our own Pattern Tables.
+     *
+     * <p>A pattern table has a single output slot, so a pipe that declines to drain it stops
+     * it crafting altogether. Third-party machines are throttled by downstream capacity
+     * ({@link #placeableNow}); a pattern table is drained as fast as the extract pulse allows
+     * and anything that cannot be placed yet is held on the job instead.
+     */
+    private static boolean drivesPatternTable(ServerLevel level, BlockPos crafter) {
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbour = crafter.relative(direction);
+            if (level.hasChunkAt(neighbour)
+                    && level.getBlockEntity(neighbour) instanceof PatternTableBlockEntity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * How much of {@code item} this job is still obliged to hand over.
+     *
+     * <p>Output covered by a claim is never surplus, however full the consumer happens to be
+     * right now. Blurring the two is what put copper ingots on the floor: three smelters
+     * feeding one alloy smelter found it full, concluded nobody wanted the ingots, and
+     * "routed" them to a default route or the ground while still owing them.
+     */
+    private static int outstandingClaims(Job job, ItemResource item) {
+        int claimed = 0;
+        for (Owed owed : job.owes) {
+            if (owed.item.equals(item) && owed.remaining > 0) {
+                claimed += owed.remaining;
+            }
+        }
+        if (item.equals(job.output) && job.remainingForRequester > 0) {
+            claimed += job.remainingForRequester;
+        }
+        return claimed;
+    }
+
+    /**
+     * How much of {@code item} this job could actually place somewhere this tick.
+     *
+     * <p>Mirrors the order {@link #shipOutput} settles in, so extraction never pulls more out
+     * of a machine than it can hand on. When everything downstream is full this is zero and
+     * the output simply stays in the machine, which is the backpressure that stops a fast
+     * smelter burying a slow one. Surplus capacity is included so a batch recipe's genuine
+     * leftovers can still leave for a default route rather than jamming the crafter.
+     */
+    private int placeableNow(ServerLevel level, PipeNetwork network, Job job, ItemResource item,
+                             int want) {
+        int total = 0;
+        for (Owed owed : job.owes) {
+            if (!owed.item.equals(item) || owed.remaining <= 0) {
+                continue;
+            }
+            PipeNodeId dest = consumerBuffer(level, owed.consumer, item);
+            if (dest != null) {
+                total += throttles(level, owed.consumer)
+                        ? acceptableAt(level, dest, item, owed.remaining)
+                        : owed.remaining;
+            }
+        }
+        if (item.equals(job.output) && job.remainingForRequester > 0) {
+            total += job.remainingForRequester;
+        }
+        // Only output beyond every outstanding claim is surplus. Falling back to a default
+        // route whenever the claimed destination was momentarily full is what let a producer
+        // drain itself into a chest - or onto the floor - while still owing the item.
+        int unclaimed = CraftJobPolicy.spareOf(want, outstandingClaims(job, item));
+        if (unclaimed > 0) {
+            total += SinkFinder.nearest(level, network, job.crafter.pos(), item, unclaimed)
+                    .map(SinkFinder.Sink::accept)
+                    .orElse(0);
+        }
+        return total;
+    }
+
+    /**
      * Sends freshly crafted output straight to where it is owed.
      *
      * <p>Never puts the output back into the crafter's inventory first. That round trip is
@@ -1243,7 +1660,15 @@ public final class CraftJobManager {
 
         // 1) Settle what the plan says this job owes downstream. Bound at plan time, so it
         // does not depend on the consumer happening to look hungry on this tick.
-        for (Owed owed : job.owes) {
+        //
+        // Iterated over a copy because a successful send rotates the list. Logistics Pipes
+        // does the same in its order manager: after shipping to a destination it moves every
+        // order for that destination to the back, so the next dispatch goes somewhere else.
+        // Serving strictly head-first instead means the first consumer absorbs everything
+        // until it is full - with five alloy smelters sharing a trickle of copper, two filled
+        // up and the other three sat waiting with only their redstone.
+        PipeNodeId served = null;
+        for (Owed owed : List.copyOf(job.owes)) {
             if (left <= 0) {
                 break;
             }
@@ -1254,32 +1679,40 @@ public final class CraftJobManager {
             if (dest == null) {
                 continue;
             }
+            // Only as much as the consumer can actually hold right now, in-flight parcels
+            // included. What will not fit stays owed and is retried next tick - the claim is
+            // paced, never abandoned.
             int send = Math.min(left, owed.remaining);
-            if (dispatchHeld(level, job.crafter, dest, item, send, from)) {
+            if (throttles(level, owed.consumer)) {
+                send = Math.min(send, acceptableAt(level, dest, item, send));
+            }
+            if (send > 0 && dispatchHeld(level, job.crafter, dest, item, send, from)) {
                 owed.remaining -= send;
                 left -= send;
+                served = owed.consumer;
             }
         }
-
-        // 2) Feed any other active craft job that still needs this as an ingredient.
-        for (Job other : jobs) {
-            if (left <= 0 || other == job) {
-                continue;
-            }
-            FeedTarget feed = feedTarget(level, other, item);
-            if (feed == null || feed.need() <= 0) {
-                continue;
-            }
-            int send = Math.min(left, feed.need());
-            if (dispatchHeld(level, job.crafter, feed.dest(), item, send, from)) {
-                left -= send;
-            }
+        if (served != null) {
+            job.rotatePast(served);
         }
 
-        // 3) Deliver what the original request still owes for this output.
+        // There is deliberately no "feed whoever else looks hungry" step here. It used to sit
+        // between the plan's claims and the requester, and it was blind to what other
+        // producers had already committed: feedTarget measured a consumer's need from its
+        // buffer and inbound parcels, while outstanding Owed claims from other crafters are
+        // not counted as inbound. So one producer would ship into another's allocation. The
+        // planner splits a multi-ingredient craft as matched sets - copper and redstone to
+        // the same machine - and crossing those allocations left two alloy smelters holding
+        // copper with no job and three holding redstone waiting for copper that was already
+        // spent elsewhere. Everything the plan intends is expressed as an Owed above or a
+        // requester claim below; anything left after both is genuine surplus.
+
+        // 2) Deliver what the original request still owes for this output.
         if (left > 0 && item.equals(job.output) && job.remainingForRequester > 0) {
             CraftJobPolicy.SurplusSplit split =
                     CraftJobPolicy.splitSurplus(left, job.remainingForRequester);
+            // Never capped: the requester is an address, not a machine. Capping it is what
+            // left a finished chest sitting in its pattern table.
             int toRequester = split.toRequester();
             if (toRequester > 0
                     && dispatchHeld(level, job.crafter, job.requester, item, toRequester, from)) {
@@ -1288,14 +1721,63 @@ public final class CraftJobManager {
             }
         }
 
-        // 4) Genuine surplus -> nearest default route (including when the crafter itself
-        // is the default). Only spill if nothing on the network can take it.
-        if (left > 0) {
-            left = routeHeldSurplus(level, network, job.crafter.pos(), item, left, from);
+        // 3) Genuine surplus only - output this job no longer owes anyone. Anything still
+        // claimed stays claimed even when its consumer is full this tick.
+        int surplus = CraftJobPolicy.spareOf(left, outstandingClaims(job, item));
+        if (surplus > 0) {
+            int unplaced = routeHeldSurplus(level, network, job.crafter.pos(), item, surplus, from);
+            left -= surplus - unplaced;
         }
-        if (left > 0) {
-            InventoryAccess.insertOrDrop(level, job.crafter.pos(), item, left);
+        if (left <= 0) {
+            return;
         }
+        // 4) Owed but nowhere to put it yet. Held on the job and retried every tick, never
+        // dropped and never pushed back into the machine: the machine stalling is the
+        // backpressure, and it resumes on its own as the consumer drains. A job that ends
+        // while still holding releases through routeOrDrop in releaseHeld.
+        job.held.merge(item, left, Integer::sum);
+    }
+
+    /**
+     * Retries anything a previous tick could not place.
+     *
+     * <p>Runs before the phase work so held output gets first claim on whatever room has
+     * appeared downstream, ahead of a fresh extract competing for the same space.
+     */
+    private void flushHeld(ServerLevel level,
+                           PipeNetwork network,
+                           Job job,
+                           Map<String, BlockPos> satellites) {
+        if (job.held.isEmpty()) {
+            return;
+        }
+        Map<ItemResource, Integer> pending = new LinkedHashMap<>(job.held);
+        job.held.clear();
+        for (Map.Entry<ItemResource, Integer> entry : pending.entrySet()) {
+            shipOutput(level, network, job, entry.getKey(), entry.getValue(), null, satellites);
+        }
+    }
+
+    /**
+     * Routes or spills whatever a job was still holding when it ends.
+     *
+     * <p>A last resort for a job that is genuinely over - cancelled, failed, or finished with
+     * nothing left owed. It must never be reached while a consumer is still waiting on that
+     * output: routing an owed item to a default route strands whoever was expecting it. The
+     * run-complete path keeps a job alive while it holds anything for exactly that reason.
+     */
+    private void releaseHeld(ServerLevel level, PipeNetwork network, Job job) {
+        if (job.held.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<ItemResource, Integer> entry : job.held.entrySet()) {
+            int left = routeHeldSurplus(
+                    level, network, job.crafter.pos(), entry.getKey(), entry.getValue(), null);
+            if (left > 0) {
+                InventoryAccess.insertOrDrop(level, job.crafter.pos(), entry.getKey(), left);
+            }
+        }
+        job.held.clear();
     }
 
     /**
@@ -1399,47 +1881,12 @@ public final class CraftJobManager {
         return null;
     }
 
-    /**
-     * Where and how much {@code other} still needs of {@code item} for remaining runs.
-     */
-    private FeedTarget feedTarget(ServerLevel any, Job other, ItemResource item) {
-        ServerLevel crafterLevel = levelOf(any, other.crafter);
-        PipeNetwork crafterNetwork = networkOf(any, other.crafter);
-        if (crafterLevel == null || crafterNetwork == null
-                || !(crafterLevel.getBlockEntity(other.crafter.pos()) instanceof CraftingPipeBlockEntity be)
-                || be.pattern().isEmpty()) {
-            return null;
-        }
-        CraftPattern pattern = be.pattern();
-        Map<String, BlockPos> satellites =
-                SatelliteLookup.findAll(crafterLevel, crafterNetwork, other.crafter.pos());
-        int perRun = 0;
-        PipeNodeId dest = other.crafter;
-        for (CraftPattern.CountedIngredient ingredient : pattern.ingredients()) {
-            if (!ingredient.item().equals(item)) {
-                continue;
-            }
-            perRun += ingredient.count();
-            Optional<BlockPos> resolved = CraftJobPolicy.resolveDest(
-                    other.crafter.pos(), ingredient.satellite(), satellites);
-            if (resolved.isEmpty()) {
-                return null;
-            }
-            dest = PipeNodeId.of(other.crafter.dimension(), resolved.get());
-        }
-        if (perRun <= 0) {
-            return null;
-        }
-        ServerLevel destLevel = levelOf(any, dest);
-        int have = destLevel == null
-                ? 0
-                : InventoryAccess.count(destLevel, dest.pos(), item);
-        int inbound = inboundTo(crafterNetwork, dest, item);
-        int need = CraftJobPolicy.missingInput(perRun, other.runsRemaining, have, inbound);
-        return need > 0 ? new FeedTarget(dest, need) : null;
-    }
-
     private void fail(ServerLevel level, PipeNetwork network, Job job) {
+        ServerLevel heldLevel = levelOf(level, job.crafter);
+        PipeNetwork heldNetwork = networkOf(level, job.crafter);
+        if (heldLevel != null && heldNetwork != null) {
+            releaseHeld(heldLevel, heldNetwork, job);
+        }
         List<PipeNodeId> buffers = new ArrayList<>();
         buffers.add(job.crafter);
 
@@ -1568,9 +2015,6 @@ public final class CraftJobManager {
         InventoryAccess.drop(level, pipe, item, taken);
     }
 
-    private record FeedTarget(PipeNodeId dest, int need) {
-    }
-
     private record BufferKey(PipeNodeId dest, ItemResource item) {
     }
 
@@ -1620,6 +2064,22 @@ public final class CraftJobManager {
         private Map<ItemResource, Integer> outputLeft;
         /** How many runs {@link #outputLeft} represents, for the {@code runsRemaining} decrement. */
         private int outputLeftRuns;
+        /**
+         * Output extracted but not yet placed anywhere, retried each tick.
+         *
+         * <p>Only ever populated for a pattern-table crafter, which is drained regardless of
+         * downstream room so it cannot jam. Everything else is throttled before extraction,
+         * so it has nothing left over to hold.
+         */
+        private final Map<ItemResource, Integer> held = new LinkedHashMap<>();
+        /**
+         * Game time the current batch started accumulating, or -1 while no output is waiting.
+         *
+         * <p>Deliberately not reset when a further run finishes: the window measures how long
+         * this batch has been held, not how long since the last one landed. Resetting on each
+         * new run would let a crafter that produces steadily hold output forever.
+         */
+        private long outputPendingSince = -1L;
 
         private Job(long id,
                     long requestId,
@@ -1703,6 +2163,29 @@ public final class CraftJobManager {
                 }
             }
             return false;
+        }
+
+        /**
+         * Moves every claim for {@code consumer} to the back of the queue.
+         *
+         * <p>Round robin across consumers, the way Logistics Pipes rotates its order queue
+         * after a successful send. Without it a producer serves its claims strictly in list
+         * order and starves everyone behind the first consumer that is not yet satisfied.
+         * Settled claims are dropped on the way past rather than kept as dead entries.
+         */
+        private void rotatePast(PipeNodeId consumer) {
+            List<Owed> moved = new ArrayList<>();
+            Iterator<Owed> iterator = owes.iterator();
+            while (iterator.hasNext()) {
+                Owed owed = iterator.next();
+                if (owed.remaining <= 0) {
+                    iterator.remove();
+                } else if (owed.consumer.equals(consumer)) {
+                    iterator.remove();
+                    moved.add(owed);
+                }
+            }
+            owes.addAll(moved);
         }
 
         /** True while any downstream crafter or the requester is still owed output. */

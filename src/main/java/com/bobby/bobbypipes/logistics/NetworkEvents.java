@@ -54,6 +54,9 @@ public final class NetworkEvents {
         }
         LinkPipeRegistry registry = LinkPipeRegistry.get(level);
         for (PipeNodeId endpoint : registry.endpointsInChunk(level, chunk.getPos())) {
+            // Deliberately does not mark the endpoint loaded: only the block entity's own
+            // onLoad does that, one tick later. Marking here would call a chunk "loaded"
+            // before its block entities are in the level.
             registry.onEndpointChunkChange(level.getServer(), endpoint);
             // Peer may still be WAITING/SEVERED until this end's BE onLoad reclaims; status
             // refresh runs again from LinkPipeBlockEntity.onLoad after claim.
@@ -94,6 +97,10 @@ public final class NetworkEvents {
     public static void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
             LinkPipeRegistry.get(level).onDimensionUnload(level.getServer(), level.dimension());
+            // Block entities in an unloading level do not all get individual callbacks, and
+            // a single-player world quit and reloaded keeps this class in memory - without
+            // this the next session would inherit the last one's "loaded" endpoints.
+            LinkPipeRegistry.forgetDimension(level.dimension());
             PipeNetwork.forget(level);
         }
     }

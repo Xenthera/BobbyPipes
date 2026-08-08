@@ -8,6 +8,7 @@ import com.bobby.bobbycore.client.gui.widget.UiButton;
 import com.bobby.bobbycore.client.gui.widget.UiTextBox;
 import com.bobby.bobbypipes.client.ClientEnergyRequestGui;
 import com.bobby.bobbypipes.menu.EnergyRequestMenu;
+import com.bobby.bobbypipes.client.ClientRequestOptions;
 import com.bobby.bobbypipes.network.payload.RequestEnergyPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -28,10 +29,13 @@ public class EnergyRequestScreen extends ThemedContainerScreen<EnergyRequestMenu
     private static final int AMOUNT_W = 70;
     private static final int ROW_H = 18;
     private static final int CONTENT_BOTTOM = 8;
+    private static final int PARTIAL_W = 22;
+    private static final int PARTIAL_GAP = 3;
 
     private ItemStack headerIcon = ItemStack.EMPTY;
     private UiTextBox amount;
     private UiButton requestButton;
+    private UiButton partialButton;
 
     public EnergyRequestScreen(EnergyRequestMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title, panelWidth(), panelHeight());
@@ -83,13 +87,27 @@ public class EnergyRequestScreen extends ThemedContainerScreen<EnergyRequestMenu
         addRenderableWidget(amount);
 
         int row2 = row1 + ROW_H + ROW_GAP;
+        int partialX = leftPos + imageWidth - SIDE_PAD - PARTIAL_W;
         requestButton = UiButton.builder(
                         Component.translatable("gui.bobbypipes.energy_request.submit"),
                         button -> sendRequest())
-                .bounds(leftPos + SIDE_PAD, row2, imageWidth - SIDE_PAD * 2, ROW_H)
+                .bounds(leftPos + SIDE_PAD, row2,
+                        imageWidth - SIDE_PAD * 2 - PARTIAL_W - PARTIAL_GAP, ROW_H)
                 .build()
                 .setTheme(PipeThemes.REQUEST);
         addRenderableWidget(requestButton);
+
+        partialButton = UiButton.builder(partialLabel(), button -> {
+                    ClientRequestOptions.toggleEnergyAllowPartial();
+                    button.setMessage(BobbyFonts.apply(partialLabel()));
+                    button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                            partialTooltip()));
+                })
+                .bounds(partialX, row2, PARTIAL_W, ROW_H)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(partialTooltip()))
+                .build()
+                .setTheme(PipeThemes.REQUEST);
+        addRenderableWidget(partialButton);
     }
 
     @Override
@@ -103,7 +121,19 @@ public class EnergyRequestScreen extends ThemedContainerScreen<EnergyRequestMenu
         if (wanted <= 0) {
             return;
         }
-        ClientPacketDistributor.sendToServer(new RequestEnergyPayload(menu.pos(), wanted));
+        ClientPacketDistributor.sendToServer(new RequestEnergyPayload(
+                menu.pos(), wanted, ClientRequestOptions.energyAllowPartial()));
+    }
+
+    /** Approximate sign while a short order may still ship, equals sign for exact-only. */
+    private static Component partialLabel() {
+        return BobbyFonts.literal(ClientRequestOptions.energyAllowPartial() ? "≈" : "=");
+    }
+
+    private static Component partialTooltip() {
+        return Component.translatable(ClientRequestOptions.energyAllowPartial()
+                ? "gui.bobbypipes.request.partial.on"
+                : "gui.bobbypipes.request.partial.off");
     }
 
     private int parseAmount() {

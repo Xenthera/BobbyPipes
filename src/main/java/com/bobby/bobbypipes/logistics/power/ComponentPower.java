@@ -1,5 +1,6 @@
 package com.bobby.bobbypipes.logistics.power;
 
+import com.bobby.bobbypipes.block.PipeBlock;
 import com.bobby.bobbypipes.block.RoutedPipeBlock;
 import com.bobby.bobbypipes.block.entity.PowerJunctionBlockEntity;
 import com.bobby.bobbypipes.logistics.LinkPipeRegistry;
@@ -34,15 +35,15 @@ public final class ComponentPower {
     private final PipeNetwork network;
 
     private Topology<BlockPos> lattice = Topology.empty();
-    /** Junction → one adjacent lattice pipe used as the routing attachment. */
+    /** Junction -> one adjacent lattice pipe used as the routing attachment. */
     private Map<BlockPos, BlockPos> attachmentPipe = Map.of();
     private Set<BlockPos> junctions = Set.of();
-    /** Junction → every junction sharing its lattice component, including itself. */
+    /** Junction -> every junction sharing its lattice component, including itself. */
     private Map<BlockPos, List<BlockPos>> networkPeers = Map.of();
-    /** Lattice pipe → component id. Same-dim link edges are already folded into the lattice. */
+    /** Lattice pipe -> component id. Same-dim link edges are already folded into the lattice. */
     private Map<BlockPos, Integer> componentOfPipe = Map.of();
     private Map<Integer, List<BlockPos>> componentJunctions = Map.of();
-    /** Component id → its local endpoints of interdimensional link pairs. */
+    /** Component id -> its local endpoints of interdimensional link pairs. */
     private Map<Integer, List<PipeNodeId>> componentLinks = Map.of();
     /**
      * One sampler per junction, keyed by position so history survives topology rebuilds.
@@ -70,9 +71,16 @@ public final class ComponentPower {
         this.lattice = newLattice;
         Map<BlockPos, BlockPos> attachments = new HashMap<>();
         for (BlockPos pipe : newLattice.nodes()) {
+            // A junction touching only plain transport pipe supplies nothing. Skipping those
+            // nodes here is also what keeps the arm honest: the same predicate decides
+            // whether the pipe draws one.
+            if (!PipeBlock.isPowerable(level.getBlockState(pipe).getBlock())) {
+                continue;
+            }
             for (Direction direction : Direction.values()) {
                 BlockPos neighbour = pipe.relative(direction);
-                if (level.getBlockEntity(neighbour) instanceof PowerJunctionBlockEntity) {
+                if (level.hasChunkAt(neighbour)
+                        && level.getBlockEntity(neighbour) instanceof PowerJunctionBlockEntity) {
                     attachments.putIfAbsent(neighbour.immutable(), pipe.immutable());
                 }
             }
@@ -190,11 +198,18 @@ public final class ComponentPower {
             for (PipeNodeId endpoint : hop.power().componentLinks.getOrDefault(hop.componentId(), List.of())) {
                 ServerLevel from = hop.power().level;
                 PipeNodeId peer = LinkPipeRegistry.get(from).peerOf(endpoint).orElse(null);
-                if (peer == null || !from.hasChunkAt(endpoint.pos())) {
+                // Deliberately the registry's loaded set rather than hasChunkAt. The latter
+                // is a ticket-level read that flickers for a while after a dimension change,
+                // and this runs every tick from the send queues' canAfford: the flicker made
+                // power wink in and out, and the getBlockEntity below then pulled the remote
+                // chunk back in, which churned the link pipe's status in lockstep.
+                if (peer == null
+                        || !LinkPipeRegistry.isLoaded(endpoint)
+                        || !LinkPipeRegistry.isLoaded(peer)) {
                     continue;
                 }
                 ServerLevel remoteLevel = LinkPipeRegistry.levelOf(from.getServer(), peer);
-                if (remoteLevel == null || !remoteLevel.hasChunkAt(peer.pos())) {
+                if (remoteLevel == null) {
                     continue;
                 }
                 ComponentPower remote = PipeNetwork.get(remoteLevel).power();
@@ -203,7 +218,10 @@ public final class ComponentPower {
                     continue;
                 }
                 for (BlockPos pos : remote.componentJunctions.getOrDefault(remoteId, List.of())) {
-                    if (remoteLevel.getBlockEntity(pos) instanceof PowerJunctionBlockEntity junction) {
+                    // A junction may sit in a different chunk from the link endpoint, so it
+                    // needs its own guard - reading it blind is what forced the load.
+                    if (remoteLevel.hasChunkAt(pos)
+                            && remoteLevel.getBlockEntity(pos) instanceof PowerJunctionBlockEntity junction) {
                         found.add(new LinkedJunction(remote, junction));
                     }
                 }
@@ -226,7 +244,8 @@ public final class ComponentPower {
     public void tick() {
         if (level.getGameTime() % LogisticsPowerCosts.SAMPLE_PERIOD_TICKS == 0) {
             for (BlockPos pos : junctions) {
-                if (level.getBlockEntity(pos) instanceof PowerJunctionBlockEntity junction) {
+                if (level.hasChunkAt(pos)
+                        && level.getBlockEntity(pos) instanceof PowerJunctionBlockEntity junction) {
                     if (junction.lastTickInserted() > 0) {
                         for (BlockPos peer : peersOf(pos)) {
                             samplerFor(peer).recordInput(junction.lastTickInserted());
@@ -282,7 +301,7 @@ public final class ComponentPower {
                 return true;
             }
         }
-        // Nothing local can pay — reach across interdimensional links.
+        // Nothing local can pay - reach across interdimensional links.
         for (LinkedJunction linked : linkedJunctions(actor)) {
             if (linked.junction().tryExtractExact(fe)) {
                 linked.owner().recordSpend(linked.junction().getBlockPos(), kind, fe);
@@ -328,21 +347,31 @@ public final class ComponentPower {
         return list;
     }
 
+    /**
+     * Junctions that can pay for {@code actor}, cheapest first.
+     *
+     * <p>Answered from the component index built at rebuild time rather than by flooding the
+     * lattice here. Every spend passes through this - each extract pulse, each link toll -
+     * and a parcel stalled at a link mouth retries its toll every tick, so a per-call BFS
+     * over the whole component turned a queue at a wormhole into a feedback loop: more
+     * stalled parcels, more floods per tick, slower drain, more stalled parcels.
+     */
     private List<ScoredJunction> scoredJunctions(BlockPos actor) {
-        Set<BlockPos> component = latticeComponent(actor);
-        if (component.isEmpty() && lattice.contains(actor)) {
-            component = Set.of(actor);
+        int componentId = componentIdAt(actor);
+        if (componentId < 0) {
+            return List.of();
         }
         List<ScoredJunction> list = new ArrayList<>();
         RoutingSnapshot<BlockPos> routes = network.routes();
-        for (Map.Entry<BlockPos, BlockPos> entry : attachmentPipe.entrySet()) {
-            if (!component.contains(entry.getValue())) {
+        for (BlockPos junctionPos : componentJunctions.getOrDefault(componentId, List.of())) {
+            BlockPos attachment = attachmentPipe.get(junctionPos);
+            if (attachment == null) {
                 continue;
             }
-            if (!(level.getBlockEntity(entry.getKey()) instanceof PowerJunctionBlockEntity junction)) {
+            if (!level.hasChunkAt(junctionPos)
+                    || !(level.getBlockEntity(junctionPos) instanceof PowerJunctionBlockEntity junction)) {
                 continue;
             }
-            BlockPos attachment = entry.getValue();
             int cost = Integer.MAX_VALUE / 4;
             if (actor.equals(attachment)) {
                 cost = 0;
@@ -354,21 +383,6 @@ public final class ComponentPower {
             list.add(new ScoredJunction(junction, cost));
         }
         return list;
-    }
-
-    private Set<BlockPos> latticeComponent(BlockPos seed) {
-        if (!lattice.contains(seed)) {
-            // Actor might be a junction neighbour — try adjacent lattice pipes.
-            Set<BlockPos> merged = new HashSet<>();
-            for (Direction direction : Direction.values()) {
-                BlockPos neighbour = seed.relative(direction);
-                if (lattice.contains(neighbour)) {
-                    merged.addAll(flood(neighbour));
-                }
-            }
-            return merged;
-        }
-        return flood(seed);
     }
 
     private Set<BlockPos> flood(BlockPos seed) {
@@ -391,6 +405,11 @@ public final class ComponentPower {
         // One affordability probe per component: it now walks link hops, so per-pipe would be costly.
         Map<Integer, Boolean> poweredByComponent = new HashMap<>();
         for (BlockPos pos : network.smartPipes()) {
+            if (!level.hasChunkAt(pos)) {
+                // A pipe in an unloaded chunk has nothing to paint, and reading it would
+                // load the chunk just to repaint a block nobody can see.
+                continue;
+            }
             BlockState state = level.getBlockState(pos);
             if (!(state.getBlock() instanceof RoutedPipeBlock)
                     || !state.hasProperty(RoutedPipeBlock.POWERED)) {

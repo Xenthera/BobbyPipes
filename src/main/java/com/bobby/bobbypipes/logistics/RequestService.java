@@ -129,7 +129,7 @@ public final class RequestService {
     /**
      * Commits as much of {@code count} as the network can source right now.
      *
-     * <p>Uses the same {@link RequestPlanner} → {@link #commit} chain as the request pipe
+     * <p>Uses the same {@link RequestPlanner} -> {@link #commit} chain as the request pipe
      * (including load-balancing a craft across every pipe with that recipe). Unlike a
      * player request that fails closed, an incomplete tree is trimmed to the satisfiable
      * amount and that smaller complete plan is committed instead.
@@ -185,6 +185,23 @@ public final class RequestService {
                                             int count,
                                             java.util.Set<Object> excludedStores,
                                             boolean spendRequestPower) {
+        return requestWhatYouCan(level, at, item, count, excludedStores, spendRequestPower, true);
+    }
+
+    /**
+     * @param allowPartial when false, an order that cannot be sourced in full ships nothing
+     *                     and reports the whole order's shortfall. Automated callers
+     *                     (supplier restock, ComputerCraft) keep the default of true: they
+     *                     top up repeatedly, so taking what is available each pass is the
+     *                     point. Only the request screen offers the choice.
+     */
+    public static Outcome requestWhatYouCan(ServerLevel level,
+                                            BlockPos at,
+                                            ItemResource item,
+                                            int count,
+                                            java.util.Set<Object> excludedStores,
+                                            boolean spendRequestPower,
+                                            boolean allowPartial) {
         if (item.isEmpty() || count <= 0) {
             return Outcome.noPipe();
         }
@@ -204,6 +221,14 @@ public final class RequestService {
             // split into a different shape.
             return new Outcome(plan, commit(level, network, plan, at, item, count,
                     excludedStores, spendRequestPower));
+        }
+        if (!allowPartial) {
+            // Nothing is committed and no power is spent beyond the plan itself, so the
+            // shortfall reported here is the full order's, not a leftover after shipping
+            // part of it. That is the whole point of the toggle: 100 chests short by 380
+            // planks reads very differently from "partial 5 of 100".
+            return new Outcome(plan, new Commitment(0, count,
+                    "chat.bobbypipes.request.fail.incomplete", ""));
         }
         int want = satisfiableAmount(plan, item);
         if (want <= 0) {
@@ -326,7 +351,7 @@ public final class RequestService {
             if (!sourceNode.equals(destNode) && !network.canDeliver(sourceNode, destNode)) {
                 if (failKey.isEmpty()) {
                     failKey = "chat.bobbypipes.request.fail.no_route";
-                    failDetail = formatNode(sourceNode) + " → " + formatNode(destNode);
+                    failDetail = formatNode(sourceNode) + " -> " + formatNode(destNode);
                 }
                 continue;
             }
@@ -423,9 +448,20 @@ public final class RequestService {
 
         for (ParcelTracker.Delivery<BlockPos, ItemShipment> delivery : report.delivered()) {
             ItemShipment shipment = delivery.payload();
-            PipeNetwork.settleItemDelivery(shipment.promiseId(), shipment.count());
-            InventoryAccess.insertOrDrop(
+            int placed = InventoryAccess.insert(
                     level, delivery.destination(), shipment.resource(), shipment.count());
+            if (placed > 0) {
+                PipeNetwork.settleItemDelivery(shipment.promiseId(), placed);
+            }
+            int left = shipment.count() - placed;
+            if (left > 0) {
+                // Not dropped, and the promise is not settled for what did not land. Held for
+                // this destination and retried, because re-addressing it to whichever machine
+                // has room would break the planner's matched split of a multi-ingredient
+                // craft - and dropping it made a crafter wait forever on items on the floor.
+                network.holdArrival(delivery.destination(), shipment.resource(), left,
+                        shipment.promiseId());
+            }
         }
 
         for (ParcelTracker.Stranded<BlockPos, ItemShipment> stranded : report.stranded()) {

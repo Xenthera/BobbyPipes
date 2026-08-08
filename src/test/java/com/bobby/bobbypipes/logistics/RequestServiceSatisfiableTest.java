@@ -29,7 +29,7 @@ class RequestServiceSatisfiableTest {
                                 item, 2, new RequestPlan.Origin.Stock<>(node))))),
                 List.of(new Demand<>(item, 3)));
 
-        // EMPTY equals EMPTY; craft adds 8, withdrawal 5 → 13
+        // EMPTY equals EMPTY; craft adds 8, withdrawal 5 -> 13
         assertEquals(13, RequestService.satisfiableAmount(plan, item));
     }
 }
